@@ -31,7 +31,7 @@ thrombus_and_microenvironment:
   thrombus_axial_position_um: 250.0
   thrombus_length_um: 80.0
   initial_occlusion_fraction: 0.95
-  thrombus_porosity_ Darcy_m2: 1.0e-14
+  thrombus_porosity_Darcy_m2: 1.0e-14
   post_occlusive_pH_initial: 6.65
   physiological_pH_target: 7.35
 
