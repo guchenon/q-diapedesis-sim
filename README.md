@@ -4,6 +4,7 @@
 [![OSF Preregistration](https://img.shields.io/badge/OSF_Registry-osf.io%2Fhtswk-blue)](https://osf.io/htswk)
 [![ORCID](https://img.shields.io/badge/ORCID-0009--0008--1357--9003-brightgreen)](https://orcid.org/0009-0008-1357-9003)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23599020.svg)](https://doi.org/10.5281/zenodo.23599020)
 
 ## Overview
 `q-diapedesis-sim` is the official 100% in-silico multi-physics and open-system Floquet–Lindblad simulation framework for the **Q-DIAPEDESIS** protocol. It investigates whether untethered magnetic microrobotic swarms can recanalize occluded cerebral penetrating arterioles (15–50 µm) to resolve the post-thrombectomy no-reflow phenomenon while preserving neurovascular physiology.
