@@ -14,6 +14,15 @@ The framework integrates four computational layers:
 3. **Floquet–Lindblad Swarm Control (`src/quantum_controller/`):** Bimodal Floquet Hamiltonian engineering ($80\text{ Hz}$ thrombolytic drilling and $5\text{ Hz}$ distal embolic trapping) paired with Lindblad dissipative tensor networks and sub-voxel state estimation.
 4. **Neurocritical Control Barrier Functions (`src/neurocritical_cbf/`):** Real-time safety filters enforcing endothelial glycocalyx preservation, shear-induced NETosis prevention ($\tau_{\text{wall}} \le 5.5\text{ Pa}$), pulsed acidotic buffering, and magnetothermal safety ($\Delta T < 0.3\ ^\circ\text{C}$).
 
+Reproducibility & Preregistration
+The mathematical formulation, falsifiable hypotheses, and physiological safety thresholds of this study are preregistered on the Open Science Framework (OSF): https://osf.io/htswk.
+
+Author
+Chanon Singson — ORCID: 0009-0008-1357-9003
+
+License
+This project is licensed under the MIT License — see the LICENSE file for details.
+
 ## Repository Structure
 ```text
 q-diapedesis-sim/
@@ -34,12 +43,3 @@ q-diapedesis-sim/
 ├── notebooks/                         # Reproducible Jupyter execution workflows
 ├── experiments/                       # Benchmark & ablation study logs
 └── docs/                              # Preregistered mathematical specifications
-
-Reproducibility & Preregistration
-The mathematical formulation, falsifiable hypotheses, and physiological safety thresholds of this study are preregistered on the Open Science Framework (OSF): https://osf.io/htswk.
-
-Author
-Chanon Singson — ORCID: 0009-0008-1357-9003
-
-License
-This project is licensed under the MIT License — see the LICENSE file for details.
