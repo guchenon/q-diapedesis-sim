@@ -1,0 +1,49 @@
+# ============================================================================
+# Q-DIAPEDESIS: Cerebral Microvascular & Biomimetic Mechanics Configuration
+# ============================================================================
+
+simulation_meta:
+  project_name: "Q-DIAPEDESIS"
+  osf_registry: "https://osf.io/htswk"
+  random_seed: 42
+  dt_seconds: 1.0e-4
+  total_time_seconds: 10.0
+
+vessel_geometry:
+  target_vessel_type: "penetrating_arteriole"
+  diameter_um_range: [15.0, 50.0]
+  default_diameter_um: 30.0
+  vessel_length_um: 500.0
+  bifurcation_angle_deg: 45.0
+  glycocalyx_baseline_thickness_um: 0.50
+
+hemodynamics_pries_secomb:
+  map_mmHg: 85.0
+  icp_mmHg: 15.0
+  cpp_baseline_mmHg: 70.0
+  heart_rate_bpm: 75.0
+  pulsatile_amplitude_ratio: 0.25
+  discharge_hematocrit: 0.45
+  plasma_viscosity_mPa_s: 1.20
+  blood_density_kg_m3: 1060.0
+
+thrombus_and_microenvironment:
+  thrombus_axial_position_um: 250.0
+  thrombus_length_um: 80.0
+  initial_occlusion_fraction: 0.95
+  thrombus_porosity_ Darcy_m2: 1.0e-14
+  post_occlusive_pH_initial: 6.65
+  physiological_pH_target: 7.35
+
+biomimicry_layer:
+  particle_radius_um: 0.75
+  margination_drift_gain: 1.85
+  selectin_catch_bond:
+    k_slip_0_inv_s: 0.50
+    k_catch_0_inv_s: 12.0
+    critical_force_pN: 15.0
+    thermal_energy_scale_pN_nm: 4.11
+  hydro_magnetic_soliton:
+    kuramoto_coupling_K: 4.50
+    phase_lag_alpha_rad: 0.35
+    washout_loss_ceiling_percent: 2.0
