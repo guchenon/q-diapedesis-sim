@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software or protocol, please cite it using the metadata below."
+type: software
+title: "Q-DIAPEDESIS: Physiology-Guided Quantum Floquet Control of Biomimetic Microrobotic Swarms for Cerebral Microvascular Recanalization"
+version: 0.1.0
+date-released: "2026-10-23"
+license: MIT
+authors:
+  - family-names: "Singson"
+    given-names: "Chanon"
+    orcid: "https://orcid.org/0009-0008-1357-9003"
+identifiers:
+  - type: url
+    value: "https://osf.io/htswk"
+    description: "OSF Preregistered Protocol and Project Repository"
+keywords:
+  - "microrobotic swarms"
+  - "cerebral microcirculation"
+  - "no-reflow phenomenon"
+  - "endothelial glycocalyx"
+  - "control barrier functions"
+  - "Floquet engineering"
+  - "selectin catch-bond"
+  - "in-silico simulation"
