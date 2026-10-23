@@ -1,0 +1,29 @@
+# ============================================================================
+# Q-DIAPEDESIS: Neurocritical-Care Control Barrier Functions (CBF) Config
+# ============================================================================
+
+cbf_safety_thresholds:
+  max_wall_shear_stress_Pa: 5.50            # Anti-NETosis & Glycocalyx shedding ceiling
+  shear_enforcement_mode: "total_wall_shear"
+  min_glycocalyx_integrity_ratio: 0.92      # Preserve >= 92% baseline thickness
+  max_brain_temp_elevation_C: 0.30          # Magnetothermal safety limit (Delta T < 0.3 C)
+  max_distal_emboli_escape_ratio: 0.01
+
+staged_cpp_recanalization:
+  enable_staged_stepping: true
+  num_recanalization_stages: 4
+  max_pressure_surge_mmHg_per_sec: 2.50
+  pulsed_pH_buffering_duty_cycle: 0.40
+  min_safe_efflux_pH: 7.15
+
+cbf_qp_solver:
+  barrier_class_kappa_shear: 5.0
+  barrier_class_kappa_thermal: 3.5
+  barrier_class_kappa_cpp: 4.0
+  control_relaxation_penalty: 100.0
+
+post_task_retrieval:
+  enable_degaussing_pulse: true
+  degaussing_decay_tau_ms: 250.0
+  retrograde_wall_velocity_um_s: 45.0
+  target_retrieval_efficiency_min: 0.99
