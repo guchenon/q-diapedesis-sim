@@ -7,7 +7,7 @@ Couples:
   - Layer 4: Neurocritical-Care Zeroing Control Barrier Function (ZCBF-QP) Safety Filter
   - Phase 4: Exponential Degaussing & Retrograde Wall-Rolling Retrieval
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599019).
+Part of the Q-DIAPEDESIS Framework (OSF registration: https://osf.io/8mysz | project: https://osf.io/hnstf | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass

@@ -145,17 +145,23 @@ for rel in sorted(named):
 # ------------------------------------------------- 7. identifiers agree across every file
 print("\n7. Identifiers are consistent across README, CITATION.cff, docs and source headers")
 ORCID = "0009-0008-1357-9003"
-OSF = "osf.io/htswk"
+OSF_REGISTRATION = "8mysz"
+OSF_PROJECT = "hnstf"
+OSF_LEGACY_PROJECT = "htswk"
 CONCEPT_DOI = "10.5281/zenodo.23599019"
 VERSION_DOI = "10.5281/zenodo.23599020"
 
 citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
 check("CITATION.cff carries the ORCID", ORCID in citation)
+check("CITATION.cff carries the OSF registration", OSF_REGISTRATION in citation)
 check("CITATION.cff carries the concept DOI", CONCEPT_DOI in citation)
 check("CITATION.cff carries the version DOI", VERSION_DOI in citation)
 check("CITATION.cff carries repository-code", "repository-code:" in citation)
 check("README carries the ORCID", ORCID in readme)
-check("README carries the OSF link", OSF in readme)
+check("README carries the OSF registration link", OSF_REGISTRATION in readme)
+check("README carries the OSF project link", OSF_PROJECT in readme)
+# The registration is private, so the README must not claim it is publicly verifiable.
+check("README states the registration verification status", "401" in readme and "cannot yet be checked" in readme)
 
 # No file may cite an ORCID or OSF GUID other than the declared ones.
 import itertools
@@ -165,7 +171,16 @@ for path in itertools.chain((ROOT / "src").rglob("*.py"), (ROOT / "docs").rglob(
         check(f"{path.name}: ORCID {found} is the declared one", found == ORCID)
     # Only the public GUID form osf.io/<guid>; api.osf.io/v2/... paths are API calls, not GUIDs.
     for found in set(re.findall(r"(?<!api\.)osf\.io/([a-z0-9]{5,})", text)):
-        check(f"{path.name}: OSF GUID {found} is the declared one", found == "htswk")
+        check(
+            f"{path.name}: OSF GUID {found} is a declared one",
+            found in {OSF_REGISTRATION, OSF_PROJECT, OSF_LEGACY_PROJECT},
+        )
+    # Source headers must cite the REGISTRATION, not the legacy project node.
+    if path.suffix == ".py" and "osf.io/" in text:
+        check(
+            f"{path.name}: header cites the registration GUID",
+            f"osf.io/{OSF_REGISTRATION}" in text,
+        )
     for found in set(re.findall(r"10\.5281/zenodo\.(\d+)", text)):
         check(
             f"{path.name}: zenodo.{found} is a declared DOI",

@@ -452,3 +452,64 @@ its **isotropic average is exactly zero**. Three controls confirm the implementa
 It earned its keep immediately: it caught an **unterminated code fence** in the README — the
 repository-structure block was never closed, so on GitHub everything after it rendered as code —
 and the missing `src/physics/` entry in the tree. Both fixed.
+
+---
+
+## Log Entry #006 — Correction to ELN #005: the registration exists, and it is `osf.io/8mysz`
+* **Date:** 2026-10-24
+* **Trigger:** Chanon supplied `osf.io/8mysz` (registration) and `osf.io/hnstf` (associated project).
+  I re-audited all three GUIDs through the public OSF API rather than accept the correction on trust.
+
+### The API response pattern settles it
+
+| GUID | `api.osf.io/v2/registrations/<guid>` | `api.osf.io/v2/nodes/<guid>` | What it is |
+| :--- | :--- | :--- | :--- |
+| **`8mysz`** | **401 Unauthorized** | **404 Not Found** | **A registration.** Private or embargoed. |
+| `hnstf` | 404 Not Found | 401 Unauthorized | A project node. Private. |
+| `htswk` | 404 Not Found | 401 Unauthorized | A project node. Private. |
+
+`8mysz` answers on the **registrations** endpoint and 404s on **nodes**; the other two do the exact
+opposite. That inversion is the discriminator, and it is why this is now settled rather than inferred:
+a GUID that OSF routes to its registrations collection *is* a registration.
+
+### What was right and what was wrong in ELN #005
+
+* **Right:** `htswk` — the GUID the repository cited in 18 places — is **not** a registration. It is a
+  project node. The finding stands, and it was worth raising.
+* **Wrong:** I wrote that the evidence "points to a private project rather than a public registration"
+  in a way that could be read as *no registration exists*. One does. I had audited only the GUID the
+  repository named, and a registration that is not linked from the repository is invisible to that
+  method. The correct statement at the time would have been narrower: *the cited GUID is not a
+  registration; whether a registration exists elsewhere this audit cannot say.* I have corrected the
+  evidence matrix Appendix C accordingly rather than leaving the stronger claim standing.
+
+### The limitation that remains, and it is the one that matters
+
+`8mysz` returns **401**, so the registration is **private or under embargo**. A preregistration earns
+its evidential weight from being publicly timestamped and readable; one that a reader cannot open
+supports the *existence* of a registration but not its *content*. So:
+
+* The word **"registered"** is now accurate and the repository points at `8mysz`.
+* The claim **"preregistered, and here is the protocol"** is still not independently checkable.
+* **Making `8mysz` public is the single step that converts the project's central claim from asserted
+  to verifiable.** Nothing else in this repository can substitute for it.
+* What *is* independently checkable meanwhile: the Zenodo snapshot `10.5281/zenodo.23599020` and the
+  git tag `v0.1.0-alpha` (`b5899d7`). `check_continuity.py` re-checks the tag on every run.
+
+### ORCID: reported as linked, but still not publicly visible
+
+`pub.orcid.org/v3.0/0009-0008-1357-9003/record` still returns **0 public works** after the Zenodo
+link was reported done. The most likely cause is that the work was added with *limited* or *private*
+visibility rather than *public*, or that propagation has not completed. Worth re-checking; if the
+visibility selector is the cause, it is a one-click fix in the ORCID works list.
+
+### Changes made in this entry
+
+* 11 source headers now read `OSF registration: https://osf.io/8mysz | project: https://osf.io/hnstf`.
+* README badge, the registration paragraph, `CITATION.cff` (both GUIDs, with the private status noted),
+  `tests/test_config_sanity.py` and the evidence-matrix header all repointed.
+* README now carries an explicit **Verification status** paragraph stating the 401 and what a reader
+  can check instead — so the limitation travels with the claim rather than living only in the ELN.
+* `check_continuity.py` (now **143 checks**) requires every source header to cite the registration
+  GUID, accepts only the three declared GUIDs anywhere in the tree, and asserts that the README keeps
+  the verification-status wording. If someone later quietly upgrades the claim, the audit fails.

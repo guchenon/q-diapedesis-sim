@@ -1,7 +1,7 @@
 # Q-DIAPEDESIS
 **Physiology-Guided Quantum Floquet Control of Biomimetic Microrobotic Swarms for Cerebral Microvascular Recanalization**
 
-[![OSF Preregistration](https://img.shields.io/badge/OSF_Registry-osf.io%2Fhtswk-blue)](https://osf.io/htswk)
+[![OSF Registration](https://img.shields.io/badge/OSF_Registration-osf.io%2F8mysz-blue)](https://osf.io/8mysz)
 [![ORCID](https://img.shields.io/badge/ORCID-0009--0008--1357--9003-brightgreen)](https://orcid.org/0009-0008-1357-9003)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23599019.svg)](https://doi.org/10.5281/zenodo.23599019)
@@ -16,7 +16,9 @@ The framework integrates four computational layers:
 4. **Neurocritical Control Barrier Functions (`src/neurocritical_cbf/`):** Real-time safety filters enforcing endothelial glycocalyx preservation, shear-induced NETosis prevention ($\tau_{\text{wall}} \le 5.5\text{ Pa}$), pulsed acidotic buffering, and magnetothermal safety ($\Delta T < 0.3\ ^\circ\text{C}$).
 
 Reproducibility & Preregistration
-The mathematical formulation, falsifiable hypotheses, and physiological safety thresholds of this study are preregistered on the Open Science Framework (OSF): https://osf.io/htswk.
+The mathematical formulation, falsifiable hypotheses, and physiological safety thresholds of this study are registered on the Open Science Framework (OSF): registration [osf.io/8mysz](https://osf.io/8mysz), associated project [osf.io/hnstf](https://osf.io/hnstf).
+
+**Verification status (2026-10-24).** The registration GUID resolves on the OSF *registrations* API endpoint, which is what distinguishes a registration from an ordinary project, but it currently answers `401 Unauthorized` — it is private or under embargo and so **cannot yet be checked by a reader**. The parameter lock that *is* independently verifiable is the Zenodo snapshot [10.5281/zenodo.23599020](https://doi.org/10.5281/zenodo.23599020) and the git tag `v0.1.0-alpha` (`b5899d7`), which `experiments/check_continuity.py` re-checks on every run. See ELN #005 and Appendix C of the evidence matrix.
 
 Author
 Chanon Singson — ORCID: 0009-0008-1357-9003

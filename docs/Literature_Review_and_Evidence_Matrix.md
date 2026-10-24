@@ -1,6 +1,6 @@
 # Verified Systematic Literature Review, SOTA Novelty Audit & Epistemic Transparency Matrix — Q-DIAPEDESIS
 **Project:** Physiology-Guided Quantum Floquet Control of Biomimetic Microrobotic Swarms for Cerebral Microvascular Recanalization  
-**OSF project:** [https://osf.io/htswk](https://osf.io/htswk) (see Appendix C) | **Software DOI (concept, all versions):** [10.5281/zenodo.23599019](https://doi.org/10.5281/zenodo.23599019)  
+**OSF registration:** [https://osf.io/8mysz](https://osf.io/8mysz) | **project:** [https://osf.io/hnstf](https://osf.io/hnstf) (see Appendix C) | **Software DOI (concept, all versions):** [10.5281/zenodo.23599019](https://doi.org/10.5281/zenodo.23599019)  
 **Author:** Chanon Singson ([ORCID: 0009-0008-1357-9003](https://orcid.org/0009-0008-1357-9003))  
 **Verification Date:** 24 October 2026 (All DOIs and PMIDs resolved against live Crossref REST API, PubMed/MEDLINE, and arXiv registries)
 
@@ -146,14 +146,19 @@ this document should be able to see exactly what each identifier does and does n
 
 | Identifier | Verified status | What it supports |
 | :--- | :--- | :--- |
-| ORCID [0009-0008-1357-9003](https://orcid.org/0009-0008-1357-9003) | Resolves to Chanon Singson. **0 public works listed.** | Author identity only; it does not yet link to this software or protocol. |
+| ORCID [0009-0008-1357-9003](https://orcid.org/0009-0008-1357-9003) | Resolves to Chanon Singson. **Still 0 public works** on the public API as of 2026-10-24, after the Zenodo link was reported as done — so whatever was linked is not set to public visibility. | Author identity only; it does not yet link to this software or protocol **in a way a reader can see**. |
 | **Concept DOI [10.5281/zenodo.23599019](https://doi.org/10.5281/zenodo.23599019)** | Resolves; all-versions record | **The DOI to cite for this software.** Always resolves to the newest archived version. Source-file headers cite this one. |
 | Version DOI [10.5281/zenodo.23599020](https://doi.org/10.5281/zenodo.23599020) | Resolves, open access, version `v0.1.0-alpha` | The **preregistration snapshot** only: `configs/` and `tests/test_config_sanity.py`. It contains **no simulation code**, so it supports the parameter lock and nothing about the implementation. |
-| [osf.io/htswk](https://osf.io/htswk) | `api.osf.io/v2/nodes/htswk` → **401** (exists, private); `api.osf.io/v2/registrations/htswk` → **404** | A **project node**. The 404 on the registrations endpoint means this GUID is **not an OSF registration**, so it does **not** currently support a claim of public preregistration. |
+| **[osf.io/8mysz](https://osf.io/8mysz)** | `registrations/8mysz` → **401** (exists, private); `nodes/8mysz` → **404** | **This is the registration.** The response pattern is the exact inverse of a project node, which is what identifies it. It is **private or embargoed**, so a reader cannot yet open it; it supports the existence of a registration but not public verifiability. |
+| [osf.io/hnstf](https://osf.io/hnstf) | `nodes/hnstf` → **401**; `registrations/hnstf` → **404** | The **associated project node**, private. |
+| [osf.io/htswk](https://osf.io/htswk) | `nodes/htswk` → **401**; `registrations/htswk` → **404** | Another **project node**, private. This is the GUID the repository cited as its preregistration until 2026-10-24; it is a project, not a registration, which is what the audit caught. |
 | GitHub `guchenon/q-diapedesis-sim` | `api.github.com` → **403** | The repository is not publicly readable, so the results are not independently reproducible from it at present. |
 
-**Consequence for how this work should be described.** Until the OSF status is resolved from
-inside the account, the protocol should be described as a **protocol document on OSF** rather
-than a preregistration, and the parameter lock should be attributed to the timestamped Zenodo
-snapshot and the `v0.1.0-alpha` git tag (`b5899d7`), which *are* verifiable. The git tag is
-checked on every run of `experiments/check_continuity.py`.
+**Consequence for how this work should be described (updated 2026-10-24).** A registration does
+exist — `osf.io/8mysz` — so the word *registered* is accurate and the repository now points there.
+But it answers `401`, so it is **private or embargoed and a reader cannot verify it**. Until it is
+made public, any claim of *preregistration* should be stated together with that limitation, and the
+independently checkable parameter lock remains the timestamped Zenodo snapshot and the
+`v0.1.0-alpha` git tag (`b5899d7`), which `experiments/check_continuity.py` re-checks on every run.
+Making the registration public is the one step that turns the project's central claim from
+asserted into verifiable.

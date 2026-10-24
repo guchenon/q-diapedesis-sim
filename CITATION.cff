@@ -22,8 +22,11 @@ identifiers:
     value: "10.5281/zenodo.23599020"
     description: "Zenodo version DOI for v0.1.0-alpha (configs-only snapshot)"
   - type: url
-    value: "https://osf.io/htswk"
-    description: "OSF project node (see ELN #005: this is a project node, not a public registration)"
+    value: "https://osf.io/8mysz"
+    description: "OSF registration (resolves on the registrations endpoint; currently private/embargoed)"
+  - type: url
+    value: "https://osf.io/hnstf"
+    description: "OSF associated project node"
 keywords:
   - "microrobotic swarms"
   - "cerebral microcirculation"

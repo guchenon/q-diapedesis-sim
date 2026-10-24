@@ -1,7 +1,7 @@
 """
 Sanity Check & Unit Tests for Q-DIAPEDESIS Preregistered Configurations.
 Verifies physical consistency and physiological Control Barrier Function (CBF) bounds
-against the immutable OSF protocol (https://osf.io/htswk).
+against the immutable OSF protocol (https://osf.io/8mysz).
 """
 
 from pathlib import Path

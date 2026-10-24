@@ -3,7 +3,7 @@ Stage 1 - Steps 08 & 09: Endothelial Glycocalyx Integrity Dynamics,
 Mechanosensitive Neutrophil NETosis Risk (Piezo1 Shear Activation),
 Pulsed Micro-Dialysis Acidotic pH Buffering, and Pennes Bioheat Model.
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599019).
+Part of the Q-DIAPEDESIS Framework (OSF registration: https://osf.io/8mysz | project: https://osf.io/hnstf | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass

@@ -4,7 +4,7 @@ Implements the In-Vivo Pries-Secomb Fahraeus-Lindqvist Viscosity Law,
 Cerebral Perfusion Pressure (CPP = MAP - ICP) driving dynamics, and
 Darcy-Brinkman hydraulic resistance across an occluded penetrating arteriole.
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599019).
+Part of the Q-DIAPEDESIS Framework (OSF registration: https://osf.io/8mysz | project: https://osf.io/hnstf | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass
