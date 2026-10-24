@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from .shear_dose_response import hill_fraction, load_dose_response_constants
+
 
 @dataclass
 class PhysiologicalState:
@@ -68,9 +70,14 @@ class GlycocalyxNetosisDynamics:
         self.pH_initial = float(thrombus["post_occlusive_pH_initial"])
         self.pH_target = float(thrombus["physiological_pH_target"])
 
-        # Kinetic rate constants grounded in microvascular pathophysiology
-        self.k_shedding_inv_Pa_s = 0.045
-        self.k_netosis_inv_s = 0.12
+        # Continuous shear dose-response constants (D3, ELN #003; implementation_constants)
+        dose = load_dose_response_constants(cbf_config_path)
+        self.hill_tau50_Pa = float(dose["hill_tau50_Pa"])
+        self.hill_n = float(dose["hill_n"])
+        self.k_glyco_mech_max_inv_s = float(dose["glyco_k_mech_max_inv_s"])
+        self.k_glyco_osc_inv_s = float(dose["glyco_k_oscillatory_inv_s"])
+        self.k_netosis_max_inv_s = float(dose["netosis_k_max_inv_s"])
+        self.k_netosis_clearance_inv_s = float(dose["netosis_clearance_inv_s"])
 
         self.reset()
 
@@ -99,21 +106,17 @@ class GlycocalyxNetosisDynamics:
         peak_shear_Pa = float(np.max(wall_shear_profile_Pa))
         mean_shear_Pa = float(np.mean(wall_shear_profile_Pa))
 
-        # 1. Step 08: Endothelial Glycocalyx Shedding Dynamics
-        # Excess shear above tau_crit (5.50 Pa) causes rapid syndecan-1 / heparan sulfate shedding;
-        # sub-threshold shear incurs only minimal baseline mechanical wear.
-        excess_shear = max(0.0, peak_shear_Pa - self.tau_crit_Pa)
-        sub_threshold_wear = 0.0015 * (mean_shear_Pa / self.tau_crit_Pa) ** 2
-        d_glyco_dt = -(self.k_shedding_inv_Pa_s * (excess_shear ** 1.5) + sub_threshold_wear) * self.glyco_ratio
+        # 1. Step 08: Endothelial glycocalyx shedding (continuous Hill dose-response, D3)
+        h_peak = float(hill_fraction(peak_shear_Pa, self.hill_tau50_Pa, self.hill_n))
+        sub_threshold_wear = self.k_glyco_osc_inv_s * (mean_shear_Pa / self.hill_tau50_Pa) ** 2
+        d_glyco_dt = -(self.k_glyco_mech_max_inv_s * h_peak + sub_threshold_wear) * self.glyco_ratio
         self.glyco_ratio = float(np.clip(self.glyco_ratio + d_glyco_dt * dt_s, 0.0, 1.0))
 
-        # 2. Step 09 (Module B3a): Mechanosensitive Piezo1 Neutrophil NETosis Activation
-        if peak_shear_Pa > self.tau_crit_Pa:
-            shear_over_ratio = (peak_shear_Pa - self.tau_crit_Pa) / self.tau_crit_Pa
-            d_net_dt = self.k_netosis_inv_s * (shear_over_ratio ** 2) * (1.0 - self.netosis_index)
-        else:
-            # Slow physiological clearance of sub-threshold activation signals
-            d_net_dt = -0.01 * self.netosis_index
+        # 2. Step 09 (Module B3a): Piezo1 NETosis, continuous in shear (Baratchi et al. 2024), with clearance
+        d_net_dt = (
+            self.k_netosis_max_inv_s * h_peak * (1.0 - self.netosis_index)
+            - self.k_netosis_clearance_inv_s * self.netosis_index
+        )
         self.netosis_index = float(np.clip(self.netosis_index + d_net_dt * dt_s, 0.0, 1.0))
 
         # 3. Step 09 (Module B3b): Pulsed Micro-Dialysis Acidotic pH Buffering

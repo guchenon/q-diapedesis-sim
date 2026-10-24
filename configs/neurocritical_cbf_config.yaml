@@ -27,3 +27,17 @@ post_task_retrieval:
   degaussing_decay_tau_ms: 250.0
   retrograde_wall_velocity_um_s: 45.0
   target_retrieval_efficiency_min: 0.99
+
+# ----------------------------------------------------------------------------
+# Model implementation constants (not preregistered hypothesis thresholds).
+# Added 2026-10-24 under decisions D3/D5; rationale logged in ELN #003.
+# ----------------------------------------------------------------------------
+implementation_constants:
+  shear_dose_response:
+    hill_tau50_Pa: 8.0              # highest shear dose tested by Baratchi et al. 2024 (80 dyn/cm^2), assumed half-maximal
+    hill_n: 6                       # a-priori criterion: Hill fraction <= 1.5% at 3.9 Pa physiological shear (Rovainen 1993)
+    glyco_k_mech_max_inv_s: 0.356   # equals the pre-D3 stripping rate at 8 Pa (0.045*(8-5.5)^1.5) at half-maximum
+    glyco_k_oscillatory_inv_s: 0.0015
+    glyco_k_enzymatic_acid_inv_s: 0.008
+    netosis_k_max_inv_s: 0.0496     # equals the pre-D3 NETosis rate at 8 Pa (0.12*((8-5.5)/5.5)^2) at half-maximum
+    netosis_clearance_inv_s: 0.01

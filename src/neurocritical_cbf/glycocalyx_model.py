@@ -17,6 +17,8 @@ from typing import Dict
 import numpy as np
 import yaml
 
+from .shear_dose_response import hill_fraction, load_dose_response_constants
+
 
 @dataclass
 class GlycocalyxLayerState:
@@ -73,9 +75,12 @@ class EndothelialGlycocalyxModel:
         self.min_integrity_target = float(thresh["min_glycocalyx_integrity_ratio"])
 
         self.n_nodes = int(n_axial_nodes)
-        self.k_mech_strip_inv_Pa_s = 0.045
-        self.k_oscillatory_fatigue_inv_s = 0.0015
-        self.k_enzymatic_acid_inv_s = 0.008
+        dose = load_dose_response_constants(cbf_config_path)
+        self.hill_tau50_Pa = float(dose["hill_tau50_Pa"])
+        self.hill_n = float(dose["hill_n"])
+        self.k_mech_max_inv_s = float(dose["glyco_k_mech_max_inv_s"])
+        self.k_oscillatory_fatigue_inv_s = float(dose["glyco_k_oscillatory_inv_s"])
+        self.k_enzymatic_acid_inv_s = float(dose["glyco_k_enzymatic_acid_inv_s"])
 
         self.reset()
 
@@ -100,12 +105,11 @@ class EndothelialGlycocalyxModel:
         if tau_Pa.shape[0] != self.n_nodes:
             tau_Pa = np.resize(tau_Pa, self.n_nodes)
 
-        # 1. Supra-threshold mechanical stripping when local tau_wall > tau_crit (5.50 Pa)
-        excess_shear = np.maximum(0.0, tau_Pa - self.tau_crit_Pa)
-        mech_rate = self.k_mech_strip_inv_Pa_s * (excess_shear ** 1.5)
+        # 1. Continuous mechanical stripping (Hill dose-response; no step at the CBF ceiling, D3)
+        mech_rate = self.k_mech_max_inv_s * hill_fraction(tau_Pa, self.hill_tau50_Pa, self.hill_n)
 
-        # 2. Sub-threshold oscillatory shear wear (Wang G et al., ATVB 2020)
-        osc_rate = self.k_oscillatory_fatigue_inv_s * ((tau_Pa / self.tau_crit_Pa) ** 2)
+        # 2. Oscillatory shear wear (Wang G et al., ATVB 2020), normalized by tau50 rather than the CBF ceiling
+        osc_rate = self.k_oscillatory_fatigue_inv_s * ((tau_Pa / self.hill_tau50_Pa) ** 2)
 
         # 3. Acidosis-potentiated heparanase / MMP enzymatic shedding (pH < 6.80)
         if pH_profile is not None:

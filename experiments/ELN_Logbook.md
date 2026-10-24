@@ -77,3 +77,24 @@ D1-c (keep 5.50 Pa; fix H1; add distal bed resistance calibrated to physiologica
 | No pH buffering | 0.39 / 3.58 / 0.991 / 0.000 / 2.00 / PASS (final pH 6.67 vs 6.78) | 11.05 s / 3.58 / 0.990 / 2.00 / PASS |
 
 **Findings from step 5:** At equal progress the CBF's measurable benefit is the CPP surge limit; its shear/glycocalyx protection only appears once recanalization goes further than the full controller reaches in 10 s. Pulsed pH buffering changes the 10 s outcome very little (pH 6.78 vs 6.67) because buffering is slow relative to the horizon. NETosis and final pH have no preregistered end-of-episode threshold, so they are reported but not gated.
+
+| 6a | C3 (D3-b), Stage 1 | Glycocalyx shedding and Piezo1 NETosis made continuous in wall shear: the step at the 5.50 Pa ceiling is replaced by a Hill dose-response `h(τ) = τⁿ/(τ₅₀ⁿ+τⁿ)` in both `glycocalyx_model.py` and `glycocalyx_netosis_dynamics.py`, via the new `src/neurocritical_cbf/shear_dose_response.py`. Oscillatory wear now normalized by τ₅₀ instead of the ceiling; NETosis keeps its −0.01·N clearance. Constants in `configs/neurocritical_cbf_config.yaml → implementation_constants.shear_dose_response`. Test `tests/test_shear_dose_response.py` written first (3 failed before) | Damage exactly **zero** for every τ < 5.50 Pa by construction; discontinuous jump at the ceiling. CBF-off 10 s: glycocalyx 0.846, NETosis 0.013 | Monotone and continuous across the ceiling (5.49 vs 5.51 Pa differ by <2%). CBF-on 10 s: glycocalyx 0.987, NETosis 0.002; CBF-off 10 s: glycocalyx **0.654**, NETosis **0.056**. Full suite 43 passed, 2 xfailed | `D3 Stage 1:` |
+
+**A-priori parameter choices for step 6a (fixed and written down before any outcome was computed):**
+* `τ₅₀ = 8.0 Pa` — the highest shear dose tested by Baratchi et al., *Nat. Commun.* 2024 (80 dyn/cm²), assumed half-maximal. Not fitted.
+* `n = 6` — chosen by the stated criterion that the Hill fraction at the cited physiological arteriolar shear (3.9 Pa, Rovainen 1993) stays ≤ 1.5 %; (3.9/8)⁶ ≈ 0.0134.
+* `k_max` for each process set so the rate at 8 Pa equals the pre-D3 rate at 8 Pa (glycocalyx 0.045·2.5¹·⁵ = 0.178 /s → k_max 0.356 /s; NETosis 0.12·(2.5/5.5)² = 0.0248 /s → k_max 0.0496 /s). This anchors the new law to the old one at one point rather than re-tuning it to an outcome.
+
+**Sensitivity sweep (step 6a), 10 s closed loop at d = 30 µm, k_max rescaled in each cell to hold the 8 Pa rate fixed:**
+
+| τ₅₀ \ n | 2 (glyco / NET, CBF-on → CBF-off) | 4 | 6 |
+| :--- | :--- | :--- | :--- |
+| 6.0 Pa | 0.587 / 0.076 → 0.302 / 0.149 | 0.880 / 0.021 → 0.398 / 0.118 | 0.967 / 0.006 → 0.451 / 0.102 |
+| 8.0 Pa (a priori) | 0.658 / 0.061 → 0.339 / 0.136 | 0.936 / 0.011 → 0.512 / 0.087 | **0.987 / 0.002 → 0.654 / 0.056** |
+| 10.0 Pa | 0.699 / 0.052 → 0.365 / 0.128 | 0.954 / 0.008 → 0.576 / 0.073 | 0.991 / 0.001 → 0.735 / 0.041 |
+
+**Findings from step 6a (reported, not tuned):**
+* The *direction* of the result is robust: in all nine cells the CBF-filtered run retains more glycocalyx and shows less NETosis than the unfiltered run. The ordering never reverses.
+* The *absolute* targets are not robust. At the a-priori parameters the CBF-on run meets the stated goals (glycocalyx 0.987 ≥ 0.92, NETosis 0.002 < 0.03), but at `n = 2` the same CBF-on run gives glycocalyx 0.587–0.699 and NETosis 0.052–0.076, failing both. Any claim phrased as an absolute retention or NETosis number is therefore a claim about `n`, not about the controller. The Hill exponent is unconstrained by the cited data; nothing in Baratchi et al. 2024 fixes it.
+* Removing the step makes the no-CBF baseline fail harder than before (glycocalyx 0.846 → 0.654, NETosis 0.013 → 0.056) because sub-ceiling shear now causes damage. This is a consequence of a more honest damage law, not evidence of stronger protection.
+* Glycocalyx retention and NETosis are **not** preregistered gated endpoints at end-of-episode, so none of the above changes a hypothesis outcome. They are descriptive.
