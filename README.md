@@ -31,6 +31,8 @@ q-diapedesis-sim/
 ├── LICENSE                            # MIT License
 ├── CITATION.cff                       # Bibliographic citation metadata (ORCID & OSF linked)
 ├── environment.yml                    # Reproducible Python 3.11 environment specification
+├── pytest.ini                         # pythonpath / testpaths (R1-R2, ELN #002)
+├── .github/workflows/sanity_ci.yml    # CI: installs pyyaml pytest numpy scipy, runs tests/
 ├── configs/                           # Centralized YAML simulation parameters
 │   ├── vessel_mra_config.yaml
 │   ├── quantum_floquet_config.yaml
@@ -41,6 +43,9 @@ q-diapedesis-sim/
 │   ├── quantum_controller/
 │   ├── neurocritical_cbf/
 │   └── observer_retrieval/
-├── notebooks/                         # Reproducible Jupyter execution workflows
-├── experiments/                       # Benchmark & ablation study logs
+├── tests/                             # Preregistration sanity & hypothesis tests (run in CI)
+├── experiments/                       # Electronic lab notebook, ablation logs, DOI audit
+│   ├── ELN_Logbook.md
+│   ├── check_dois.py
+│   └── doi_audit.tsv
 └── docs/                              # Preregistered mathematical specifications

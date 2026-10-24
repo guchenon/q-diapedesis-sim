@@ -69,3 +69,41 @@ A rigorous audit of the literature up to October 2026 confirms that **no prior p
 | **8** | PINO sub-voxel tracking error $< 8.0\ \mu\text{m}$ in $50–200\text{ ms}$ window | **Status A** (MRN & PINO) / **Status B** ($<8\ \mu\text{m}$ error) | MRI $24\text{ Hz}$ duty cycle (`10.3109/10929080802551274`); $80\text{ ms}$ frame / $0.4\text{ s}$ latency (`10.1038/s41467-023-43966-w`); PINO (`10.1145/3648506`). | 95th-percentile Euclidean centroid tracking error during $100\text{ ms}$ MRI actuation blind windows vs. dead-reckoning and Kalman baselines. |
 | **9** | Brain temperature elevation $\Delta T < 0.30\ ^\circ\text{C}$ | **Status A** (stroke fever harm) / **Status B** ($0.3^\circ\text{C}$ margin) | Ischemic penumbra consumption $>37.5^\circ\text{C}$ (`10.1093/braincomms/fcaa116`); AMF limit $H\cdot f < 4.85\times 10^8\text{ A m}^{-1}\text{s}^{-1}$ (`10.1016/j.jmmm.2006.10.1156`). | Conservative engineering thermal safety margin $\Delta T < 0.30\ ^\circ\text{C}$ above baseline Pennes perfusion equilibrium. |
 | **10** | Post-task degaussing + retrograde retrieval $\ge 99.0\%$ | **Status A** (SOTA $76–92\%$ at $\ge 0.9\text{ mm}$) / **Status B** ($\ge 99\%$ target) | SOTA catheter retrieval $76.4–91.9\%$ at $<5\text{ cm/s}$ (`10.1126/sciadv.adk8970`; `10.1002/advs.202415305`); upstream rolling (`10.1126/scirobotics.aba5726`). | Final mass-balance fraction of deployed agents recovered at the parent catheter mouth after exponential degaussing and retrograde wall rolling. |
+
+---
+
+## Appendix A — DOI Resolution Audit (L2, 2026-10-24)
+
+Every DOI appearing in `docs/`, `src/` and `README.md` was resolved against the DOI
+content-negotiation API (`application/vnd.citationstyles.csl+json`) and the returned title was
+compared against the claim it supports in this document.
+
+**Result: 87 / 87 unique DOIs resolve, and the returned titles match the claims.** The audit
+script is `experiments/check_dois.py`.
+
+Titles confirmed for the load-bearing citations:
+
+| DOI | Resolved title | Claim it supports |
+| :--- | :--- | :--- |
+| `10.1002/ana.78142` | Revisiting Incomplete Tissue-Level Reperfusion Following Successful Thrombectomy for Acute Ischemic Stroke | No-reflow after successful recanalization |
+| `10.1161/STROKEAHA.124.049574` | Persistent Tissue-Level Hypoperfusion (No-Reflow) Negates the Clinical Benefit of Successful Thrombectomy | Futile recanalization, EXTEND-IA pooled |
+| `10.1038/s41467-024-51211-1` | Piezo1 expression in neutrophils regulates shear-induced NETosis | Shear dose-response for NETosis (D3 Stage 1) |
+| `10.1007/s00220-024-05217-x` | Absence of Barren Plateaus and Scaling of Gradients in the Energy Optimization of Isometric Tensor Network States | Barren-plateau freedom (D2-b) |
+| `10.1038/s41534-024-00804-1` | Theoretical guarantees for permutation-equivariant quantum neural networks | Equivariant ansatz gradient scaling |
+| `10.1063/1.4870768` | Behavior of rotating magnetic microrobots above the step-out frequency… | Mahoney step-out law |
+| `10.1177/0271678X20914179` | Dynamic capillary stalls in reperfused ischemic penumbra contribute to injury… | Capillary stalling, neutrophil role |
+| `10.1016/0026-2862(89)90018-6` | Red cell distribution at microvascular bifurcations | Plasma skimming at bifurcations |
+| `10.1016/S0140-6736(22)01882-7` | Intensive blood pressure control after endovascular thrombectomy (ENCHANTED2/MT) | CPP/BP management after MT |
+
+**Correction to an earlier spot-check.** An interim note in ELN #003 reported
+`10.1002/ana.78142` (Qiao et al. 2026) as "not found". That was wrong — it resolves, and its
+title matches the claim. The earlier check was manual and is superseded by this audit.
+
+**What this audit does and does not establish.** It confirms that each DOI exists and points at
+a paper whose title matches the claim made here. It does **not** verify that the specific
+numbers quoted in this document (percentages, odds ratios, cohort sizes) appear in those
+papers; that requires reading each one. Three figures the simulation depends on quantitatively
+were checked against their sources by hand and are recorded in ELN #002/#003: the Rovainen 1993
+arteriolar wall shear (39 ± 14 dyn/cm²), the Pries 1994 in-vivo viscosity law, and the Baratchi
+2024 top shear dose (80 dyn/cm²). The remaining quoted figures have not been checked at that
+level.
