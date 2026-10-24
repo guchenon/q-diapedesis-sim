@@ -131,7 +131,7 @@ class EndothelialGlycocalyxModel:
 
     def get_state(self) -> GlycocalyxLayerState:
         """Returns the current spatial and summary glycocalyx integrity state."""
-        thickness_um = self. baseline_um * self.integrity_profile
+        thickness_um = self.baseline_um * self.integrity_profile
         mean_ratio = float(np.mean(self.integrity_profile))
         min_ratio = float(np.min(self.integrity_profile))
         return GlycocalyxLayerState(

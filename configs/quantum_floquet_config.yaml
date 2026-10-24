@@ -41,3 +41,15 @@ implementation_constants:
     # equivariant_scaling_exponent() for the quantity the theory actually bounds.
     gradient_variance_floor: 1.0e-3
     measurement_samples: 256
+  step_out:
+    # Mahoney-Abbott step-out frequencies, previously hard-coded in floquet_hamiltonian.py (D5).
+    # Values unchanged; they are design parameters of the particle, not measured here.
+    alpha_stepout_frequency_Hz: 95.0
+    beta_stepout_frequency_Hz: 12.0
+    amplitude_scaling_clip: [0.85, 1.25]
+  dual_task_score_weights:
+    # Weights of the preregistered `dual_task_fidelity` score. Moved to config unchanged (D5).
+    # See ELN #003 finding 6e: this score has no term penalizing an inadequate field and is
+    # monotonically non-increasing in field amplitude, so it rewards turning the actuator off.
+    alpha_sync_weight: 0.52
+    beta_mesh_weight: 0.48

@@ -67,9 +67,15 @@ class BimodalFloquetController:
         self.truncation_order = int(drive["floquet_truncation_order"])
         self.target_fidelity = float(drive["target_dual_task_fidelity_min"])
 
-        # Step-out frequencies engineered via magnetic moment / hydrodynamic drag ratio (Mahoney 2014)
-        self.f_stepout_alpha_Hz = 95.0
-        self.f_stepout_beta_Hz = 12.0
+        # Step-out frequencies engineered via magnetic moment / hydrodynamic drag ratio (Mahoney 2014).
+        # D5 (ELN #003): moved out of the source into implementation_constants.step_out, unchanged.
+        step_out = self.cfg["implementation_constants"]["step_out"]
+        self.f_stepout_alpha_Hz = float(step_out["alpha_stepout_frequency_Hz"])
+        self.f_stepout_beta_Hz = float(step_out["beta_stepout_frequency_Hz"])
+        self.amplitude_scaling_clip = tuple(float(v) for v in step_out["amplitude_scaling_clip"])
+        weights = self.cfg["implementation_constants"]["dual_task_score_weights"]
+        self.alpha_sync_weight = float(weights["alpha_sync_weight"])
+        self.beta_mesh_weight = float(weights["beta_mesh_weight"])
 
         # Pauli matrices used as generators of classical SO(3)/SU(2) dipole rotation
         self.sigma_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=complex)
@@ -226,8 +232,9 @@ class BimodalFloquetController:
         fb = self.f_beta_Hz if f_beta_override_Hz is None else float(f_beta_override_Hz)
 
         # Effective step-out scales linearly with applied B-field amplitude
-        f_so_alpha_eff = self.f_stepout_alpha_Hz * np.clip(scale, 0.85, 1.25)
-        f_so_beta_eff = self.f_stepout_beta_Hz * np.clip(scale, 0.85, 1.25)
+        lo, hi = self.amplitude_scaling_clip
+        f_so_alpha_eff = self.f_stepout_alpha_Hz * np.clip(scale, lo, hi)
+        f_so_beta_eff = self.f_stepout_beta_Hz * np.clip(scale, lo, hi)
 
         # Group alpha rotation at fa (80 Hz): synchronous if fa <= f_so_alpha_eff
         omega_rot_alpha = self.stepout_rotation_rate_Hz(fa, f_so_alpha_eff)
@@ -247,7 +254,12 @@ class BimodalFloquetController:
         h_eff = self.compute_floquet_magnus_hamiltonian(b_alpha, b_beta, fa, fb)
         floquet_decoupling_bonus = 1.0 - 0.5 * ((fb / max(fa, 1.0)) ** 2)
         dual_fidelity = float(
-            np.clip(0.52 * alpha_sync_fidelity + 0.48 * beta_mesh_stiffness * floquet_decoupling_bonus, 0.0, 0.995)
+            np.clip(
+                self.alpha_sync_weight * alpha_sync_fidelity
+                + self.beta_mesh_weight * beta_mesh_stiffness * floquet_decoupling_bonus,
+                0.0,
+                0.995,
+            )
         )
 
         return BimodalFloquetState(

@@ -74,8 +74,13 @@ class NeurocriticalCBFSafetyFilter:
         self.relaxation_penalty = float(qp["control_relaxation_penalty"])
 
         # Coupling gains mapping control actions to shear, thermal power, and pressure surge
-        self.shear_per_mT_Hz = 0.0042       # [Pa / (mT * Hz)]
-        self.Surge_mmHg_per_recanal_rate = 18.0
+        # D5 (ELN #003): these couplings were hard-coded here. Moved to
+        # implementation_constants.cbf_coupling in configs/neurocritical_cbf_config.yaml,
+        # values unchanged. Neither is derived from a cited measurement.
+        coupling = self.cfg["implementation_constants"]["cbf_coupling"]
+        self.shear_per_mT_Hz = float(coupling["robot_shear_Pa_per_mT_Hz"])          # [Pa / (mT * Hz)]
+        self.Surge_mmHg_per_recanal_rate = float(coupling["cpp_surge_mmHg_per_recanal_rate"])
+        self.thermal_cooling_rate_inv_s = float(coupling["thermal_cooling_rate_inv_s"])
 
     def compute_staged_cpp_target(
         self,
@@ -141,7 +146,10 @@ class NeurocriticalCBFSafetyFilter:
             return 0.5 * (du_scale ** 2 + du_recanal ** 2) + 0.5 * self.relaxation_penalty * (slack ** 2)
 
         def cbf_shear_constraint(z: np.ndarray) -> float:
-            # h_shear = effective_tau_max - (tau_hydro + z[0] * tau_robot_nom) + slack >= 0
+            # h_shear = effective_tau_max - (tau_hydro + z[0] * tau_robot_nom) >= 0.
+            # No slack term: R3 (ELN #002) removed it. The shared relaxation slack let a
+            # feasible QP solution breach the 5.50 Pa ceiling, which is what produced the
+            # original 5.5049 Pa CI failure. Slack now survives only on the thermal barrier.
             total_shear = float(hydrodynamic_wall_shear_Pa) + z[0] * nom_robot_shear
             h_s = effective_tau_max - total_shear
             return self.kappa_shear * h_s
@@ -149,7 +157,7 @@ class NeurocriticalCBFSafetyFilter:
         def cbf_thermal_constraint(z: np.ndarray) -> float:
             # L_f h_thermal + L_g h_thermal * z[0] + kappa_thermal * h_thermal + slack >= 0
             heating_rate = 1.8e-6 * float(nominal_freq_Hz) * ((z[0] * float(nominal_b_mT)) ** 2)
-            cooling_rate = 0.08 * float(current_delta_T_C)
+            cooling_rate = self.thermal_cooling_rate_inv_s * float(current_delta_T_C)
             dh_dt = cooling_rate - heating_rate
             return dh_dt + self.kappa_thermal * h_thermal_0 + z[2]
 

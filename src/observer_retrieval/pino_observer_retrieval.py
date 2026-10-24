@@ -268,9 +268,16 @@ class DegaussingRetrogradeRetrieval:
         self.v_retro_um_s = float(ret_cfg["retrograde_wall_velocity_um_s"])
         self.target_retrieval_min = float(ret_cfg["target_retrieval_efficiency_min"])
 
+        # D5 (ELN #003): retrieval accounting constants moved out of the source, values unchanged.
+        model = self.cfg["implementation_constants"]["post_task_retrieval_model"]
+        self.branch_recapture_efficiency_max = float(model["branch_recapture_efficiency_max"])
+        self.mainstem_loss_floor_pct = float(model["mainstem_plugging_loss_floor_pct"])
+        self.mainstem_loss_per_cohesion_pct = float(model["mainstem_plugging_loss_per_cohesion_pct"])
+        self.default_degaussing_duration_ms = float(model["default_degaussing_duration_ms"])
+
     def execute_post_task_retrieval(
         self,
-        degaussing_duration_ms: float = 1200.0,
+        degaussing_duration_ms: float | None = None,
         retrieval_distance_um: float = 250.0,
         transient_washout_percent: float = 1.15,
         enable_degaussing_override: bool | None = None,
@@ -280,10 +287,15 @@ class DegaussingRetrogradeRetrieval:
         mass-balance fraction of deployed microrobots retrieved at the parent catheter mouth.
         """
         use_degauss = self.enable_degaussing if enable_degaussing_override is None else bool(enable_degaussing_override)
+        duration_ms = (
+            self.default_degaussing_duration_ms
+            if degaussing_duration_ms is None
+            else float(degaussing_duration_ms)
+        )
 
         if use_degauss:
             # Exponentially damped alternating pulse decays remanent dipole clumping: exp(-t / tau_d)
-            residual_cohesion = float(np.exp(-float(degaussing_duration_ms) / max(self.tau_degauss_ms, 1.0)))
+            residual_cohesion = float(np.exp(-duration_ms / max(self.tau_degauss_ms, 1.0)))
         else:
             # Without degaussing, dipole chains remain aggregated and risk capillary plugging
             residual_cohesion = 0.85
@@ -296,12 +308,14 @@ class DegaussingRetrogradeRetrieval:
         # Transient washout agents (< 2.0%) that entered the proximal bifurcation collar
         # are actively recalled along the branch wall during retrograde rolling if disaggregated.
         transient_pct = float(np.clip(transient_washout_percent, 0.0, 100.0))
-        branch_recapture_efficiency = 0.82 * (1.0 - residual_cohesion)
+        branch_recapture_efficiency = self.branch_recapture_efficiency_max * (1.0 - residual_cohesion)
         recovered_from_branch_pct = transient_pct * branch_recapture_efficiency
         unrecovered_branch_pct = transient_pct - recovered_from_branch_pct
 
         # Main-stem capillary trapping loss scales with residual magnetic chain clumping
-        mainstem_plugging_loss_pct = 0.25 + 14.5 * residual_cohesion
+        mainstem_plugging_loss_pct = (
+            self.mainstem_loss_floor_pct + self.mainstem_loss_per_cohesion_pct * residual_cohesion
+        )
 
         total_unrecovered_pct = unrecovered_branch_pct + mainstem_plugging_loss_pct
         final_recovered_fraction = float(np.clip(1.0 - (total_unrecovered_pct / 100.0), 0.0, 1.0))

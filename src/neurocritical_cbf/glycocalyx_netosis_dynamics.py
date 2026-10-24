@@ -79,6 +79,12 @@ class GlycocalyxNetosisDynamics:
         self.k_netosis_max_inv_s = float(dose["netosis_k_max_inv_s"])
         self.k_netosis_clearance_inv_s = float(dose["netosis_clearance_inv_s"])
 
+        # D5 (ELN #003): bioheat constants moved out of the source, values unchanged.
+        bioheat = self.cbf_cfg["implementation_constants"]["bioheat"]
+        self.heating_rate_degC_per_s_per_Hz_mT2 = float(bioheat["heating_rate_degC_per_s_per_Hz_mT2"])
+        self.perfusion_cooling_base_inv_s = float(bioheat["perfusion_cooling_base_inv_s"])
+        self.perfusion_velocity_scale_um_s = float(bioheat["perfusion_velocity_scale_um_s"])
+
         self.reset()
 
     def reset(self) -> PhysiologicalState:
@@ -127,11 +133,19 @@ class GlycocalyxNetosisDynamics:
         d_pH_dt = (self.pH_target - self.current_pH) / tau_pH_s
         self.current_pH = float(np.clip(self.current_pH + d_pH_dt * dt_s, self.pH_initial, self.pH_target))
 
-        # 4. Step 09 (Module B7): Pennes Bioheat Equation for Magnetothermal Brain Safety
-        # Low-frequency AMF power density scales with f * B^2; blood perfusion convects heat away
-        q_mag_mW_cm3 = 1.8e-6 * drive_frequency_Hz * (b_field_amplitude_mT ** 2)
-        perfusion_cooling_inv_s = 0.08 * (1.0 + blood_perfusion_velocity_um_s / 1000.0)
-        d_temp_dt = q_mag_mW_cm3 - perfusion_cooling_inv_s * self.delta_T_C
+        # 4. Step 09 (Module B7): magnetothermal brain-safety heat balance.
+        # UNIT CORRECTION (D3/D5, ELN #003): this term was named `q_mag_mW_cm3` and commented as
+        # a power density, but it is added straight into dT/dt, so it is a specific heating RATE
+        # in degC/s and its coefficient carries degC/(s*Hz*mT^2). The value is unchanged.
+        # This is NOT a Pennes bioheat solution: no tissue density, specific heat, conductivity or
+        # SAR conversion appears anywhere in the model. Reduced-order surrogate, Status B.
+        heating_rate_degC_s = (
+            self.heating_rate_degC_per_s_per_Hz_mT2 * drive_frequency_Hz * (b_field_amplitude_mT ** 2)
+        )
+        perfusion_cooling_inv_s = self.perfusion_cooling_base_inv_s * (
+            1.0 + blood_perfusion_velocity_um_s / self.perfusion_velocity_scale_um_s
+        )
+        d_temp_dt = heating_rate_degC_s - perfusion_cooling_inv_s * self.delta_T_C
         self.delta_T_C = float(np.clip(self.delta_T_C + d_temp_dt * dt_s, 0.0, 5.0))
 
         self.current_time_s += float(dt_s)
