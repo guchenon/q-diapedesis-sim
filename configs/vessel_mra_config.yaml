@@ -47,3 +47,13 @@ biomimicry_layer:
     kuramoto_coupling_K: 4.50
     phase_lag_alpha_rad: 0.35
     washout_loss_ceiling_percent: 2.0
+
+# ----------------------------------------------------------------------------
+# Model implementation constants (not preregistered hypothesis thresholds).
+# Added 2026-10-24 under decisions D1/D5; rationale logged in ELN #003.
+# ----------------------------------------------------------------------------
+implementation_constants:
+  arteriole_pressure_drop_fraction_of_cpp: 0.08   # share of CPP across the modeled arteriole + distal bed
+  distal_bed_calibration:
+    target_open_vessel_peak_wss_Pa: 3.9           # Rovainen et al., JCBFM 1993;13:359 (39 +/- 14 dyn/cm^2)
+    calibration_diameter_um: 30.0                 # calibrated once; held fixed for other diameters

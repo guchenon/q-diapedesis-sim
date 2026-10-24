@@ -63,6 +63,43 @@ class PriesSecombPulsatileFlow:
         self.mu_plasma_mPa_s = float(hemo["plasma_viscosity_mPa_s"])
         self.blood_density = float(hemo["blood_density_kg_m3"])
 
+        impl = self.cfg.get("implementation_constants", {})
+        self.dp_fraction_of_cpp = float(impl.get("arteriole_pressure_drop_fraction_of_cpp", 0.08))
+        bed_cal = impl.get("distal_bed_calibration")
+        # Series resistance of the downstream precapillary/capillary bed (D1, ELN #003)
+        self.R_distal_bed = (
+            self._calibrate_distal_bed_resistance(
+                target_peak_wss_Pa=float(bed_cal["target_open_vessel_peak_wss_Pa"]),
+                calibration_diameter_um=float(bed_cal["calibration_diameter_um"]),
+            )
+            if bed_cal is not None
+            else 0.0
+        )
+
+    def _calibrate_distal_bed_resistance(self, target_peak_wss_Pa: float, calibration_diameter_um: float) -> float:
+        """
+        Returns R_distal_bed [Pa s / m^3] such that a fully open, unobstructed arteriole of
+        `calibration_diameter_um` carries `target_peak_wss_Pa` peak hydrodynamic wall shear at
+        the systolic CPP maximum. Uses the same discretization as `solve_flow_step`.
+        Calibrated once; the value is then fixed for every vessel diameter.
+        """
+        n = int(self.geom.n_nodes)
+        dz_m = (float(self.geom.length_um) / (n - 1)) * 1.0e-6
+        r_um = 0.5 * float(calibration_diameter_um) - float(self.geom.glyco_baseline_um)
+        r_m = r_um * 1.0e-6
+        mu_Pa_s = float(self.compute_in_vivo_viscosity_mPa_s(np.array([2.0 * r_um]))[0]) * 1.0e-3
+        r_segment = n * (8.0 * mu_Pa_s * dz_m) / (np.pi * r_m ** 4)
+
+        phase = np.linspace(0.0, 2.0 * np.pi, 20001)
+        waveform_max = float(np.max(0.78 * np.sin(phase) + 0.22 * np.sin(2.0 * phase - 0.45)))
+        peak_dp_Pa = self.dp_fraction_of_cpp * self.cpp_baseline_mmHg * (1.0 + self.pulse_amp_ratio * waveform_max) * MMHG_TO_PA
+
+        area_m2 = np.pi * r_m ** 2
+        tau_no_bed = 4.0 * mu_Pa_s * (peak_dp_Pa / (r_segment * area_m2)) / r_m
+        if tau_no_bed <= target_peak_wss_Pa:
+            return 0.0
+        return float(r_segment * (tau_no_bed / target_peak_wss_Pa - 1.0))
+
     def compute_in_vivo_viscosity_mPa_s(self, diameter_um: np.ndarray) -> np.ndarray:
         """
         Computes the apparent in-vivo blood viscosity using the empirical Pries-Secomb
@@ -132,11 +169,11 @@ class PriesSecombPulsatileFlow:
         darcy_res = (mu_Pa_s * dz_m * (state.occlusion_fraction ** 2)) / (
             state.darcy_permeability_m2 * area_m2 + 1.0e-24
         )
-        total_hydraulic_res = float(np.sum(poiseuille_res + darcy_res))
+        total_hydraulic_res = float(np.sum(poiseuille_res + darcy_res)) + self.R_distal_bed
 
         cpp_t_mmHg, phase_rad, is_systole = self.instantaneous_cpp_mmHg(time_s, cpp_override_mmHg)
-        # Microvascular pressure drop across a 500 um penetrating arteriole segment (~8% of total CPP drop)
-        segment_delta_P_Pa = 0.08 * cpp_t_mmHg * MMHG_TO_PA
+        # Pressure drop across the 500 um arteriole plus its distal bed (implementation constant, ELN #003)
+        segment_delta_P_Pa = self.dp_fraction_of_cpp * cpp_t_mmHg * MMHG_TO_PA
 
         q_m3_s = segment_delta_P_Pa / max(total_hydraulic_res, 1.0e-12)
         q_um3_s = q_m3_s * 1.0e18
