@@ -24,6 +24,26 @@ Chanon Singson — ORCID: 0009-0008-1357-9003
 License
 This project is licensed under the MIT License — see the LICENSE file for details.
 
+## Method naming — what the modules actually implement
+
+Two module names in this repository promise more than the code delivers, and both are recorded
+here rather than quietly left in place (D11 / ELN #003):
+
+* **`PINOSubVoxelObserver` (Module B2)** is a **Physics-Informed Spectral MAP Observer**: a
+  five-mode regularized Fourier estimator of the cerebral haemodynamic waveform (mean plus the
+  first and second cardiac harmonics in sine and cosine), solved as a maximum-a-posteriori fit
+  whose weighting follows from the measurement and prior uncertainties. **There is no neural
+  network in it and no operator is learned.** `PhysicsInformedSpectralObserver` is provided as
+  the accurate alias; the original name is kept so imports do not break. The neural-operator
+  literature cited alongside it (Li et al., ICLR 2021) describes a method this code does not use.
+  Its measured accuracy advantage comes mostly from the physics prior, not from the estimator:
+  giving a Kalman filter the same cardiac-harmonic model closes about three quarters of the gap
+  (see the harmonic-aware Kalman baseline it reports), and the remaining margin exists partly
+  because the batch fit is a *smoother* that uses the whole window rather than a causal filter.
+* **The two-level `LindbladEquivariantTTN` density matrix** is a reduced-order surrogate
+  (Status B), not a derivation from the N-body dipolar Hamiltonian, and the magnetothermal term
+  is a specific heating rate, not a Pennes bioheat solution.
+
 ## Repository Structure
 ```text
 q-diapedesis-sim/
@@ -42,10 +62,13 @@ q-diapedesis-sim/
 │   ├── biomimicry_mechanics/
 │   ├── quantum_controller/
 │   ├── neurocritical_cbf/
-│   └── observer_retrieval/
+│   ├── observer_retrieval/
+│   └── physics/                       # First-principles parameter derivations (D7-D8)
 ├── tests/                             # Preregistration sanity & hypothesis tests (run in CI)
 ├── experiments/                       # Electronic lab notebook, ablation logs, DOI audit
 │   ├── ELN_Logbook.md
+│   ├── check_continuity.py            # config -> code -> docs continuity audit
 │   ├── check_dois.py
 │   └── doi_audit.tsv
 └── docs/                              # Preregistered mathematical specifications
+```

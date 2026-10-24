@@ -30,6 +30,7 @@ class SubVoxelObserverReport:
     pino_p95_error_um: float
     pino_median_error_um: float
     kalman_p95_error_um: float
+    harmonic_kalman_p95_error_um: float
     dead_reckoning_p95_error_um: float
     last_hold_p95_error_um: float
     passes_subvoxel_target: bool
@@ -55,10 +56,27 @@ class PINOSubVoxelObserver:
     every 2.0 ms during the 50-200 ms MRI imaging-actuation blind window by coupling spectral
     Fourier modes of the pulsatile advection equation with RF phase-contrast tomography priors.
 
+    WHAT THIS CLASS ACTUALLY IS (D11, ELN #003). Despite the name, there is no neural network
+    here and no operator is learned. The estimator is a **Physics-Informed Spectral MAP
+    Observer**: a five-mode regularized Fourier fit of the cerebral haemodynamic waveform
+    (mean, first and second cardiac harmonics in sine and cosine), solved as a
+    maximum-a-posteriori problem whose weighting lambda = sigma_v^2 / sigma_c^2 follows from the
+    measurement and prior uncertainties. `PhysicsInformedSpectralObserver` is provided as an
+    alias and is the accurate name; the `PINOSubVoxelObserver` name is kept so imports and the
+    registered module layout do not break. The Li et al. (ICLR 2021) neural-operator citations
+    describe a method this code does not use.
+
+    WHERE THE ACCURACY COMES FROM. The spectral observer is given the full cardiac waveform as
+    a prior; plain dead reckoning gets only the mean, and the plain Kalman filter gets the mean
+    plus a constant-velocity model. To separate "does the physics prior help?" from "is this
+    estimator better than a Kalman filter?", a HARMONIC-AWARE KALMAN FILTER is also reported:
+    the same harmonic model, carried in the filter state, processed sequentially. If that
+    baseline matches the spectral observer, the advantage is the prior and not the architecture.
+
     Epistemic note (Audit Table Row 8):
     The 50-200 ms blind window (100 ms default) and < 8.0 um 95th-percentile tracking error
-    are Status B falsifiable design targets benchmarked against Kalman filter, dead-reckoning,
-    and last-observation-hold baselines.
+    are Status B falsifiable design targets benchmarked against Kalman filter, harmonic-aware
+    Kalman filter, dead-reckoning, and last-observation-hold baselines.
     """
 
     def __init__(self, config_path: Path | str | None = None):
@@ -104,6 +122,9 @@ class PINOSubVoxelObserver:
              advantage is expected to appear only for long enough windows.
           2. Kalman: a textbook linear KF on [z, v] with a constant-velocity process model,
              consuming the same velocity measurements. No handicap.
+          2b. Harmonic-aware Kalman (D11): the same KF but carrying the cardiac harmonic
+             coefficients in its state, so it has the SAME physics prior as the spectral
+             observer. Reported to separate the value of the prior from the value of the method.
           3. Dead reckoning: the pre-window velocity estimate, held constant. Ignores the
              measurements.
           4. Last-observation hold: frozen at the last pre-window position.
@@ -176,6 +197,48 @@ class PINOSubVoxelObserver:
             z_kf[k] = x[0]
         err_kf = np.hypot(z_true - z_kf, r_true - r_0)
 
+        # 3b. D11: HARMONIC-AWARE Kalman filter. Same measurements, same physics prior as the
+        #     spectral observer - the cardiac harmonics are carried in the filter state - but
+        #     processed sequentially rather than as one batch MAP fit. This isolates the value of
+        #     the prior from the value of the estimator: if this matches the spectral observer,
+        #     the advantage is the prior.
+        basis_full = np.column_stack(
+            [
+                np.ones_like(t_s),
+                np.sin(omega_c * t_s),
+                np.cos(omega_c * t_s),
+                np.sin(2.0 * omega_c * t_s),
+                np.cos(2.0 * omega_c * t_s),
+            ]
+        )
+        c_prior_hk = np.array(
+            [
+                wall_coupling * mean_flow_velocity_um_s,
+                wall_coupling * mean_flow_velocity_um_s * pulsatile_amplitude_ratio * 0.78 * np.cos(0.4),
+                wall_coupling * mean_flow_velocity_um_s * pulsatile_amplitude_ratio * 0.78 * np.sin(0.4),
+                wall_coupling * mean_flow_velocity_um_s * pulsatile_amplitude_ratio * 0.22,
+                0.0,
+            ]
+        )
+        sigma_c_hk = np.maximum(0.25 * np.abs(c_prior_hk), 5.0)
+        x_h = np.concatenate([[z_0], c_prior_hk])                       # [z, c0..c4]
+        P_h = np.diag(np.concatenate([[1.0], sigma_c_hk**2]))
+        R_h = np.array([[sigma_v**2]])
+        z_hk = np.empty(n_steps)
+        for k in range(n_steps):
+            b_k = basis_full[k]
+            if k > 0:
+                F_h = np.eye(6)
+                F_h[0, 1:] = b_k * dt_s                                  # z advances by basis . c
+                x_h = F_h @ x_h
+                P_h = F_h @ P_h @ F_h.T
+            H_h = np.concatenate([[0.0], b_k]).reshape(1, 6)             # velocity is observed
+            S_h = H_h @ P_h @ H_h.T + R_h
+            K_h = P_h @ H_h.T @ np.linalg.inv(S_h)
+            x_h = x_h + (K_h @ (np.array([v_meas[k]]) - H_h @ x_h)).ravel()
+            P_h = P_h - K_h @ H_h @ P_h
+            z_hk[k] = x_h[0]
+
         # 4. PINO: spectral least-squares fit of the velocity on the known cardiac harmonics,
         #    then integrated. The design matrix contains no information about the truth beyond
         #    the frequency, which is part of the stated prior.
@@ -214,6 +277,9 @@ class PINOSubVoxelObserver:
         # Radial position: the prior is the same cardiac oscillation about the margination band.
         r_pino = r_0 + 0.6 * (np.sin(omega_c * t_s) - np.sin(0.0))
         err_pino = np.hypot(z_true - z_pino, r_true - r_pino)
+        # The harmonic-aware KF shares the spectral observer's radial prior, so the only thing
+        # that differs between them is how the axial estimate is formed (D11).
+        err_hk = np.hypot(z_true - z_hk, r_true - r_pino)
 
         p95_pino = float(np.percentile(err_pino, 95))
         report = SubVoxelObserverReport(
@@ -222,6 +288,7 @@ class PINOSubVoxelObserver:
             pino_p95_error_um=p95_pino,
             pino_median_error_um=float(np.median(err_pino)),
             kalman_p95_error_um=float(np.percentile(err_kf, 95)),
+            harmonic_kalman_p95_error_um=float(np.percentile(err_hk, 95)),
             dead_reckoning_p95_error_um=float(np.percentile(err_dr, 95)),
             last_hold_p95_error_um=float(np.percentile(err_hold, 95)),
             passes_subvoxel_target=bool(p95_pino < self.error_ceiling_um),
@@ -237,6 +304,7 @@ class PINOSubVoxelObserver:
             "velocity_measurement_sigma_um_s": sigma_v,
             "pino_z_um": z_pino,
             "kalman_z_um": z_kf,
+            "harmonic_kalman_z_um": z_hk,
             "dead_reckoning_z_um": z_dr,
             "last_hold_z_um": np.full_like(z_true, z_0),
         }
@@ -332,3 +400,10 @@ class DegaussingRetrogradeRetrieval:
             unrecovered_loss_fraction=unrecovered_fraction,
             passes_retrieval_target=bool(final_recovered_fraction >= self.target_retrieval_min),
         )
+
+
+# D11 (ELN #003): the accurate name for what this class implements. The original name is kept so
+# imports and the registered module layout do not break, but it is the alias that describes the
+# method: a five-mode regularized Fourier (spectral) MAP estimator with a haemodynamic prior,
+# not a trained neural operator.
+PhysicsInformedSpectralObserver = PINOSubVoxelObserver

@@ -52,15 +52,17 @@ def test_step11_and_step12_margination_and_catch_bond_sweep():
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "D3 Stage 2 (ELN #003): with a genuinely incoherent start, per-rotor natural-frequency "
-        "dispersion and Stokes-Einstein-Debye rotational noise, the preregistered coupling "
-        "K = 4.50 rad/s is below the critical coupling of the 80 Hz alpha sub-swarm "
-        "(K_c ~ sigma*sqrt(8/pi) + 2D ~ 18 rad/s at the a-priori 2% frequency CV). "
-        "Measured r_global = 0.30 vs the preregistered >= 0.85; beta coverage 0.79 vs >= 0.90; "
-        "washout 2.78% vs < 2.0%. The earlier pass came from initializing phases inside a "
-        "+/-0.6 rad window (r started at ~0.95), not from the coupling. Even at zero frequency "
-        "dispersion r reaches only 0.795 in 2 s. Thresholds deliberately left unchanged; "
-        "awaiting a decision on K (or on the threshold) from the preregistration owner."
+        "D7 (ELN #004): the coupling is now DERIVED from the magnetic dipole-dipole torque and "
+        "the rotational drag of the configured particle, and in the geometry this model seeds it "
+        "is NEGATIVE: K = -1.65 rad/s at 30 um (-2.22 at 15 um, -0.55 at 50 um). An axially "
+        "extended near-wall band has most neighbours along the drive axis, where the secular "
+        "geometric factor (1.5 sin^2 psi - 1) is -1, so the dipolar torques anti-align the "
+        "phases. Measured r_global 0.073, beta coverage 0.565, washout 3.42% against the "
+        "preregistered >= 0.85, >= 0.90 and < 2.0%. The free value this replaced, K = +4.50, was "
+        "wrong in SIGN as well as magnitude. No moment or density fixes it in this geometry - "
+        "raising either strengthens the anti-alignment; only a single-layer cross-sectional disc "
+        "gives positive coupling (+3.22 rad/s) and that would still need 2.3x the moment. "
+        "Thresholds unchanged; see ELN #004 for the derivation and the three validation controls."
     ),
 )
 def test_step13_and_step14_soliton_synchronization_and_washout():

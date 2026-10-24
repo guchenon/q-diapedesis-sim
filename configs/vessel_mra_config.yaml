@@ -44,7 +44,13 @@ biomimicry_layer:
     critical_force_pN: 15.0
     thermal_energy_scale_pN_nm: 4.11
   hydro_magnetic_soliton:
-    kuramoto_coupling_K: 4.50
+    # D7 (ELN #003): kuramoto_coupling_K was the free number 4.50 (present in the
+    # v0.1.0-alpha snapshot but never declared a locked protocol parameter in ELN #001 and
+    # never asserted by tests/test_config_sanity.py). It is now DERIVED from the magnetic
+    # dipole-dipole torque and the rotational drag of the configured particle, in the
+    # geometry the swarm actually seeds. See src/physics/derived_parameters.py.
+    derive_coupling_from_physics: true
+    kuramoto_coupling_K: 4.50          # legacy free value; used only if the switch above is false
     phase_lag_alpha_rad: 0.35
     washout_loss_ceiling_percent: 2.0
 
@@ -68,3 +74,10 @@ implementation_constants:
     # D_r = kT / (8 pi eta a^3), using biomimicry_layer.particle_radius_um and
     # hemodynamics_pries_secomb.plasma_viscosity_mPa_s at the temperature below.
     temperature_K: 310.0
+  dipolar_coupling_derivation:
+    # Inputs to the D7 first-principles coupling calculation. No new free parameter: the
+    # magnetic moment follows from the configured step-out frequency via m = 2 pi f_so zeta_r / B.
+    radial_band_fraction_of_lumen: [0.75, 0.94]   # the swarm model's own margination band
+    axial_span_um: 250.0                          # axial extent the swarm seeds over
+    reference_particles: 80                       # sample size for the lattice sum
+    sampling_seed: 1

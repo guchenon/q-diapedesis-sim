@@ -76,26 +76,18 @@ def test_pipeline_fidelity_responds_to_the_cbf_filtered_field():
     assert on.dual_task_floquet_fidelity != off.dual_task_floquet_fidelity, (
         "the recorded fidelity must depend on the field actually applied"
     )
-    # Measured direction, recorded deliberately: cutting the field RAISES this score
-    # (0.993464 filtered vs 0.993391 unfiltered). See the xfail below - that is a property of
-    # how the preregistered score is defined, not of the controller.
-    assert on.dual_task_floquet_fidelity > off.dual_task_floquet_fidelity
+    # D10 (ELN #003): the direction has reversed, and is now the physical one. Cutting the field
+    # LOWERS the score (0.9064 filtered vs 0.9485 unfiltered at 15 um), because a starved field
+    # drives the 80 Hz sub-swarm toward step-out. Before D10 the filtered arm scored higher,
+    # which made the CBF's effect on actuation fidelity impossible to falsify.
+    assert on.dual_task_floquet_fidelity < off.dual_task_floquet_fidelity
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D3 / 6e (ELN #003): the preregistered `dual_task_fidelity` has no term penalizing an "
-        "inadequate field, so it is monotonically NON-INCREASING in field amplitude: a field at "
-        "10% of nominal - which would do no drilling at all - scores 0.994371, higher than the "
-        "0.992558 scored at full nominal field. It is also completely blind to any reduction "
-        "below 0.85x, because the effective step-out frequency is computed as "
-        "f_stepout * clip(scale, 0.85, 1.25). The score therefore rewards switching the "
-        "actuator off. Definition left unchanged pending a decision from the preregistration "
-        "owner; `magnus_propagator_fidelity` is the quantity that is actually computed from "
-        "state evolution."
-    ),
-)
+# D10 (ELN #003): this xfail has been REMOVED - the defect it recorded is fixed. The score used
+# to be monotonically non-increasing in field amplitude (a field at 10% of nominal scored
+# 0.994371 against 0.992558 at full nominal) and was blind to any reduction below 0.85x because
+# the effective step-out frequency was clipped. The clip is gone and the drilling term now
+# carries the available magnetic torque, so the score falls when the field is starved.
 def test_dual_task_score_should_penalize_an_inadequate_field():
     f = BimodalFloquetController()
     full = f.evaluate_control_step(0.0, b_scale_factor=1.0, f_alpha_override_Hz=80.0, f_beta_override_Hz=5.0)

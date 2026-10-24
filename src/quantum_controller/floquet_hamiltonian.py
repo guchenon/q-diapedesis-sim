@@ -124,9 +124,20 @@ class BimodalFloquetController:
         if self.truncation_order < 2:
             return h_0 + h_1
 
-        # Second-order frequency-mixing correction scaling as (f_beta / f_alpha)^2
-        freq_ratio_sq = (fb / max(fa, 1.0)) ** 2
-        h_2 = 0.15 * freq_ratio_sq * float(b_alpha_mT * b_beta_mT) * self.sigma_z / omega_a
+        # Second-order van Vleck / Floquet-Magnus term for a single harmonic (Bukov et al.,
+        # Adv. Phys. 2015). D10 (ELN #003) replaces the previous
+        #   h_2 = 0.15 * (f_beta/f_alpha)^2 * B_alpha B_beta sigma_z / omega_alpha
+        # whose coefficient 0.15 was not derived from the Magnus series and which had no
+        # measurable effect: orders 1 and 2 agreed to eight decimal places. The correct term is
+        #   H^(2) = ( [[H_{+1}, H_0], H_{-1}] + [[H_{-1}, H_0], H_{+1}] ) / (2 omega^2)
+        # and tests/test_d9_d10_criteria_and_falsifiability.py checks that it really does bring
+        # H_eff closer to the numerically exact i log U(T) / T than first order does.
+        def comm(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+            return x @ y - y @ x
+
+        h_2 = (
+            comm(comm(h_plus, h_0), h_minus) + comm(comm(h_minus, h_0), h_plus)
+        ) / (2.0 * omega_a**2)
         return h_0 + h_1 + h_2
 
     def bimodal_drive_hamiltonian(
@@ -232,13 +243,23 @@ class BimodalFloquetController:
         fb = self.f_beta_Hz if f_beta_override_Hz is None else float(f_beta_override_Hz)
 
         # Effective step-out scales linearly with applied B-field amplitude
-        lo, hi = self.amplitude_scaling_clip
-        f_so_alpha_eff = self.f_stepout_alpha_Hz * np.clip(scale, lo, hi)
-        f_so_beta_eff = self.f_stepout_beta_Hz * np.clip(scale, lo, hi)
+        # D10 (ELN #003): the step-out frequency is PROPORTIONAL to the field amplitude
+        # (Mahoney et al. 2014: omega_so = m B / zeta_r). The previous
+        # `np.clip(scale, 0.85, 1.25)` made the model blind to any field reduction below 0.85x,
+        # which is exactly the regime the CBF filter drives it into.
+        f_so_alpha_eff = self.f_stepout_alpha_Hz * scale
+        f_so_beta_eff = self.f_stepout_beta_Hz * scale
 
         # Group alpha rotation at fa (80 Hz): synchronous if fa <= f_so_alpha_eff
         omega_rot_alpha = self.stepout_rotation_rate_Hz(fa, f_so_alpha_eff)
         alpha_sync_fidelity = float(np.clip(omega_rot_alpha / max(fa, 1.0), 0.0, 1.0))
+
+        # D10: drilling also needs torque, and torque is proportional to the applied field. The
+        # fraction is capped at 1 so over-driving past the design field is not rewarded. Without
+        # this term the score had nothing penalizing an inadequate field and rose as the field
+        # was cut, which made the hypothesis unfalsifiable.
+        torque_fraction = float(np.clip(scale, 0.0, 1.0))
+        alpha_drill_efficiency = alpha_sync_fidelity * torque_fraction
 
         # Group beta response to high-frequency fa (80 Hz >> f_so_beta = 12 Hz):
         # Above step-out, parasitic rotation rate decays as ~ 0.5 * (f_so_beta / fa)^2
@@ -248,14 +269,16 @@ class BimodalFloquetController:
         # Group beta synchronous locking to the slow 5 Hz trapping mode
         omega_rot_beta = self.stepout_rotation_rate_Hz(fb, f_so_beta_eff)
         beta_lock_efficiency = float(np.clip(omega_rot_beta / max(fb, 1.0), 0.0, 1.0))
-        beta_mesh_stiffness = float(np.clip(beta_lock_efficiency * (1.0 - 1.2 * crosstalk_leakage), 0.0, 1.0))
+        beta_mesh_stiffness = float(
+            np.clip(beta_lock_efficiency * (1.0 - 1.2 * crosstalk_leakage) * torque_fraction, 0.0, 1.0)
+        )
 
         # Joint dual-task fidelity F_dual (Audit Table Row 6b: target >= 0.92)
         h_eff = self.compute_floquet_magnus_hamiltonian(b_alpha, b_beta, fa, fb)
         floquet_decoupling_bonus = 1.0 - 0.5 * ((fb / max(fa, 1.0)) ** 2)
         dual_fidelity = float(
             np.clip(
-                self.alpha_sync_weight * alpha_sync_fidelity
+                self.alpha_sync_weight * alpha_drill_efficiency
                 + self.beta_mesh_weight * beta_mesh_stiffness * floquet_decoupling_bonus,
                 0.0,
                 0.995,

@@ -16,6 +16,8 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from src.physics import derive_swarm_coupling_K
+
 
 @dataclass
 class BiomimeticSwarmState:
@@ -69,10 +71,12 @@ class HydroMagneticSolitonSwarm:
         self.rng = np.random.default_rng(meta_seed if seed is None else int(seed))
 
         geom = self.vessel_cfg["vessel_geometry"]
+        diameter_um = (
+            float(geom["default_diameter_um"]) if lumen_diameter_um is None else float(lumen_diameter_um)
+        )
         self.vessel_length_um = float(geom["vessel_length_um"])
         # M1 (ELN #003): the closed loop can run at 15, 30 or 50 um, but this was always built
         # from the config default, so an overridden episode placed the swarm in the wrong lumen.
-        diameter_um = float(geom["default_diameter_um"]) if lumen_diameter_um is None else float(lumen_diameter_um)
         self.lumen_diameter_um = diameter_um
         self.lumen_radius_um = 0.5 * diameter_um
 
@@ -81,7 +85,24 @@ class HydroMagneticSolitonSwarm:
         self.thrombus_len_um = float(thrombus["thrombus_length_um"])
 
         soliton = self.vessel_cfg["biomimicry_layer"]["hydro_magnetic_soliton"]
-        self.coupling_K = float(soliton["kuramoto_coupling_K"])
+        # D7 (ELN #003): the coupling is derived from the magnetic dipole-dipole torque and the
+        # rotational drag of the configured particle, in the geometry this model actually seeds.
+        # The SIGN is physical and is kept: a negative K means the dipolar torques anti-align
+        # the phases, which is what an axially extended near-wall band produces.
+        self.coupling_is_derived = bool(soliton.get("derive_coupling_from_physics", False))
+        if self.coupling_is_derived:
+            detail = derive_swarm_coupling_K(
+                self.vessel_cfg, self.floquet_cfg, diameter_um, return_detail=True
+            )
+            self.derived_coupling_K_rad_s = float(detail["coupling_K_rad_s"])
+            self.derived_moment_A_m2 = float(detail["moment_A_m2"])
+            self.placeable_dose_fraction = float(detail["placeable_fraction"])
+            self.coupling_K = self.derived_coupling_K_rad_s
+        else:
+            self.derived_coupling_K_rad_s = float("nan")
+            self.derived_moment_A_m2 = float("nan")
+            self.placeable_dose_fraction = float("nan")
+            self.coupling_K = float(soliton["kuramoto_coupling_K"])
         self.phase_lag_alpha = float(soliton["phase_lag_alpha_rad"])
         self.washout_ceiling_pct = float(soliton["washout_loss_ceiling_percent"])
 
@@ -177,7 +198,7 @@ class HydroMagneticSolitonSwarm:
             mask = self.labels == group_id
             theta_g = self.phases_rad[mask]
             n_g = theta_g.size
-            if n_g > 1 and K_eff > 0.0:
+            if n_g > 1 and K_eff != 0.0:
                 # Pairwise phase differences: theta_j - theta_i - alpha
                 diff_matrix = theta_g[np.newaxis, :] - theta_g[:, np.newaxis] - self.phase_lag_alpha
                 coupling_term = (K_eff / float(n_g)) * np.sum(np.sin(diff_matrix), axis=1)

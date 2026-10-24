@@ -20,6 +20,8 @@ from typing import Dict
 import numpy as np
 import yaml
 
+from src.physics import derive_dissipation_gamma
+
 from .ttn_gradient_variance import (
     GLOBAL_COST_FIT_SIZES,
     equivariant_local_cost_gradient_variance,
@@ -68,7 +70,26 @@ class LindbladEquivariantTTN:
             self.cfg = yaml.safe_load(f)
 
         ttn_cfg = self.cfg["lindblad_and_tensor_network"]
-        self.gamma_viscous = float(ttn_cfg["viscous_dissipation_gamma"])
+        # D8 (ELN #003): in the overdamped regime of a 0.75 um rotor in plasma the SAME quantity
+        # m B / zeta_r sets both the coherent precession scale and the dissipative relaxation
+        # scale, so gamma cannot be chosen independently of H_eff. It is now derived.
+        # Note also the unit inconsistency this exposes: H_eff is assembled from field
+        # amplitudes in mT and then used in exp(-i H t) with t in seconds, i.e. mT read as
+        # rad/s. `mT_to_rad_s` is the physical conversion; the Hamiltonian itself is left
+        # untouched because it carries a preregistered threshold.
+        self.dissipation_is_derived = bool(ttn_cfg.get("derive_dissipation_from_physics", False))
+        if self.dissipation_is_derived:
+            root_dir = Path(__file__).resolve().parent.parent.parent
+            with open(root_dir / "configs" / "vessel_mra_config.yaml", "r", encoding="utf-8") as f:
+                vessel_cfg = yaml.safe_load(f)
+            derived = derive_dissipation_gamma(vessel_cfg, self.cfg)
+            self.gamma_viscous = float(derived["viscous_dissipation_gamma"])
+            self.gamma_physical_rad_s = float(derived["gamma_physical_rad_s"])
+            self.mT_to_rad_s = float(derived["mT_to_rad_s"])
+        else:
+            self.gamma_viscous = float(ttn_cfg["viscous_dissipation_gamma"])
+            self.gamma_physical_rad_s = float("nan")
+            self.mT_to_rad_s = float("nan")
         self.dipole_J0 = float(ttn_cfg["dipole_interaction_strength_J0"])
         self.chi_max = int(ttn_cfg["ttn_max_bond_dimension_chi"])
         self.equivariant = bool(ttn_cfg["permutation_equivariant_symmetry"])
@@ -77,10 +98,33 @@ class LindbladEquivariantTTN:
 
         # D5: the barren-plateau floor was hard-coded as 1.0e-3; moved to config unchanged.
         bp_cfg = self.cfg["implementation_constants"]["barren_plateau"]
-        self.gradient_variance_floor = float(bp_cfg["gradient_variance_floor"])
+        self.legacy_gradient_variance_floor = float(bp_cfg["gradient_variance_floor"])
         self.gradient_variance_samples = int(bp_cfg["measurement_samples"])
+        self.max_polynomial_decay_exponent = float(bp_cfg["max_polynomial_decay_exponent"])
+        self.max_log_log_fit_residual = float(bp_cfg["max_log_log_fit_residual_log2"])
+        self.min_improvement_orders = float(bp_cfg["min_improvement_orders"])
 
         self.reset()
+
+    @cached_property
+    def barren_plateau_free(self) -> bool:
+        """
+        D9 (ELN #003): the plateau-freedom verdict, from the measured SCALING rather than a
+        fixed variance floor. Freedom from barren plateaus means the gradient variance decays
+        only polynomially in N - a finite exponent with a power law that actually fits - and
+        that it stays far above the unstructured global-cost baseline. A constant floor tests
+        the wrong property: here the polynomial decay crosses 1e-3 at about N = 24, so the old
+        criterion rejected an ansatz that is in fact plateau-free.
+        """
+        report = self.benchmark_barren_plateau_scaling()
+        p = float(report["equivariant_polynomial_decay_exponent_p"])
+        residual = float(report["equivariant_log_log_fit_max_residual_log2"])
+        orders = float(report["variance_improvement_orders_of_magnitude"])
+        return bool(
+            0.0 < p < self.max_polynomial_decay_exponent
+            and residual <= self.max_log_log_fit_residual
+            and orders >= self.min_improvement_orders
+        )
 
     @cached_property
     def measured_gradient_variance(self) -> float:
@@ -169,7 +213,7 @@ class LindbladEquivariantTTN:
             dissipative_attractor_overlap=overlap,
             ttn_bond_dimension_chi=self.chi_max,
             gradient_variance=grad_var,
-            barren_plateau_free_verified=bool(grad_var >= self.gradient_variance_floor),
+            barren_plateau_free_verified=self.barren_plateau_free,
             optimal_field_correction_scale=field_scale,
         )
 

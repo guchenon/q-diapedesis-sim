@@ -107,3 +107,32 @@ were checked against their sources by hand and are recorded in ELN #002/#003: th
 arteriolar wall shear (39 ± 14 dyn/cm²), the Pries 1994 in-vivo viscosity law, and the Baratchi
 2024 top shear dose (80 dyn/cm²). The remaining quoted figures have not been checked at that
 level.
+
+
+---
+
+## Appendix B — Method-to-Citation Correspondence (D11, 2026-10-24)
+
+A citation must describe the method the code runs. Two entries in this matrix did not, and both
+are corrected here rather than left to be read the generous way.
+
+| Module | Cited as | What the code actually implements | Status |
+| :--- | :--- | :--- | :--- |
+| B2 observer | Physics-Informed Neural Operator (Li, Kovachki, Anandkumar et al., ICLR 2021, arXiv:2010.08895) | Five-mode regularized Fourier (spectral) MAP estimator with a cardiac-harmonic prior. No neural network; no learned operator; no training of any kind. | **Citation does not describe the method.** Keep the Fourier/spectral-prior framing, drop the neural-operator claim, or implement one. |
+| B4 Lindblad | GKLS master equation (Lindblad 1976; Gorini, Kossakowski & Sudarshan 1976) | A genuine RK4 integration of the GKLS generator — correct since D3 — but on a **two-level reduced-order surrogate** not derived from the N-body dipolar Hamiltonian. | Citation correct for the equation; the **reduction** is Status B and must be labelled as such in the manuscript. |
+| B7 thermal | Pennes bioheat equation | A specific heating rate in degC/s minus a perfusion term. No tissue density, specific heat, conductivity or SAR conversion appears anywhere. | **Not a Pennes solution.** Label as a lumped thermal surrogate (Status B). |
+
+**Where the B2 accuracy comes from, decomposed (D11).** p95 tracking error, mean of 12 seeds:
+
+| Blind window | Spectral MAP | Harmonic-aware Kalman | Plain Kalman | Dead reckoning | Last hold |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 50 ms | 0.968 µm | 1.175 µm | 1.674 µm | 1.770 µm | 5.970 µm |
+| 100 ms | 1.189 µm | 1.483 µm | 2.531 µm | 2.981 µm | 11.468 µm |
+| 200 ms | 2.520 µm | 2.978 µm | 5.082 µm | 5.122 µm | 22.112 µm |
+
+Roughly **three quarters of the margin over a plain Kalman filter is the physics prior**, not the
+estimator: a Kalman filter given the same cardiac-harmonic model recovers most of it. The
+residual ~20 % belongs to the batch MAP form, which uses the whole window including samples
+later than the instant it estimates — it is a **smoother, not a causal filter**. For real-time
+use inside the blind window the harmonic-aware Kalman filter is the fair comparator, and it also
+clears the preregistered < 8.0 µm ceiling at every window.

@@ -219,3 +219,166 @@ D1-c (keep 5.50 Pa; fix H1; add distal bed resistance calibrated to physiologica
 * **What the DOI audit does not establish**, stated so it is not over-read: it confirms each DOI exists and points at a paper whose title matches the claim. It does **not** verify that the specific percentages, odds ratios and cohort sizes quoted in the evidence matrix appear in those papers. Only three quantitative figures the simulation actually depends on were checked against their sources by hand — Rovainen 1993 wall shear, the Pries 1994 viscosity law, Baratchi 2024 top dose. The rest have not been checked at that level.
 * **L2, README** claimed a `notebooks/` directory that does not exist, and omitted `tests/`, `pytest.ini` and the CI workflow. Corrected to match the repository.
 * **CI runtime** rose from ~8 s to ~2.8 min locally, because the barren-plateau measurement now simulates a full 2¹² state vector and the observer runs real estimators. Results are memoized, which changes no number. If this is too slow for CI, the shot counts and fit sizes are the knobs — but reducing them reduces the evidence, so that is a decision for the preregistration owner rather than a silent optimization.
+
+---
+
+## Log Entry #004 — Argon Decisions D7–D11 (first-principles parameters, falsifiable criteria)
+* **Date:** 2026-10-24
+* **Branch:** `claude/argon-d1-d6` (continuing; one issue per commit)
+
+### Preregistration status check, done before touching anything
+
+Argon's premise was that `kuramoto_coupling_K: 4.50`, `viscous_dissipation_gamma: 0.15`,
+`attractor_overlap > 0.80` and the `1e-3` gradient-variance floor "are not locked in the OSF
+preregistration". I verified this against the tag the repository itself presents as the
+preregistration lock, `v0.1.0-alpha` (`b5899d7`), rather than taking it on trust. The result is
+more nuanced than either reading:
+
+| Quantity | In the `v0.1.0-alpha` tree? | Named in the ELN #001 lock list? | Asserted by the preregistered `tests/test_config_sanity.py`? | Classification |
+| :--- | :--- | :--- | :--- | :--- |
+| `kuramoto_coupling_K: 4.50` | **yes** (`configs/vessel_mra_config.yaml`) | no | no | revisable, with a recorded rationale |
+| `viscous_dissipation_gamma: 0.15` | **yes** (`configs/quantum_floquet_config.yaml`) | no | no | revisable, with a recorded rationale |
+| `attractor_overlap > 0.80` | no (test file not in the tag) | no | no | not preregistered |
+| gradient variance `>= 1e-3` | no (test file not in the tag) | no | no | not preregistered |
+| `target_dual_task_fidelity_min: 0.92` | **yes** | **yes** | **yes** | **preregistered endpoint** |
+| `washout_loss_ceiling_percent: 2.0` | **yes** | **yes** | **yes** | **preregistered endpoint** |
+
+So the two config values *are* in the timestamped snapshot — Argon's "YAML only" wording is not
+quite right — but neither is declared a locked protocol parameter nor verified by the
+preregistered test, so revising them with the derivation written down is legitimate and is not
+an OSF hypothesis deviation. **D10 is different** and is logged as a deviation below.
+
+### DEVIATION-01 — operational redefinition of a preregistered endpoint (D10)
+
+`target_dual_task_fidelity_min: 0.92` is named in the ELN #001 lock list **and** asserted by the
+preregistered sanity test. D10 does not change the number, but it changes the formula that
+produces the quantity compared against it, which is a change to how a preregistered comparison
+is evaluated — exactly what ELN #002 rule 3 says must be filed. **Chanon must file this on OSF.**
+Before: `0.52·alpha_sync + 0.48·beta_stiffness·bonus`, with the effective step-out frequency
+clipped by `clip(scale, 0.85, 1.25)`. After: the drilling term carries the available magnetic
+torque and the step-out frequency is proportional to field amplitude. At the nominal design
+point the score is essentially unchanged (0.9926 before, 0.9926 after), so the design point did
+not move; what changed is that the score can now fall.
+
+| Step | ID | Change | Before | After | Commit prefix |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 8 | D7 | `kuramoto_coupling_K` **derived** from the magnetic dipole–dipole torque and rotational drag of the configured particle, in the geometry the swarm actually seeds. New `src/physics/derived_parameters.py`. No new free parameter: the moment follows from the configured step-out frequency via `m = 2π f_so ζ_r / B` → **8.935×10⁻¹⁶ A·m²** (M_eff 506 A/m, plausible for a composite bead). Sign is now honoured (the old code clipped `K ≤ 0` to zero coupling) | `K = 4.50` rad/s, a free positive number. Stage 2 after 2 s: r_global 0.304, β coverage 0.793, washout 2.78 % | `K_derived` = **−2.22 / −1.65 / −0.55 rad/s** at d = 15/30/50 µm — **negative**. Stage 2 after 2 s: r_global **0.073–0.075**, β coverage 0.565, washout **3.42 %** | `D7:` |
+| 9 | D8 | `viscous_dissipation_gamma` **derived**: in the overdamped regime the same quantity `m B / ζ_r` sets both the coherent precession scale and the dissipative relaxation scale, so they cannot be chosen independently | `γ = 0.15`; physical ratio γ/‖H‖ = 0.0167; overlap 0.550 → 0.622 | `γ = 6.711` in code units (**45× larger**); physical ratio γ/‖H‖ = **0.747**; overlap **0.6633**, steady by 1.2 s | `D8:` |
+| 10 | D9 | Barren-plateau verdict changed from the fixed floor `Var ≥ 1e-3` to the measured **polynomial decay exponent** plus the margin over the global-cost baseline, which is what OSF Hypothesis 4 registers | Verdict false at N = 200 (Var 1.65e−6 < 1e−3) although the ansatz is plateau-free | Verdict **true**: p = **2.74** (bounded, log–log residual 0.52 ≤ 1.5), improvement **111.3 ≥ 10** orders | `D9:` |
+| 11 | D10 | `clip(scale, 0.85, 1.25)` removed from the effective step-out frequency (Mahoney 2014: `f_so ∝ B`); drilling term now `(ω_rot,α / f_α,nom) × min(scale, 1)`; the invented `0.15` second-order coefficient replaced by the **van Vleck term** `([[H₊,H₀],H₋] + [[H₋,H₀],H₊]) / 2ω²`. **DEVIATION-01** | Score **non-increasing** in field amplitude: 0.994371 at 10 % field vs 0.992558 at nominal; blind below 0.85×; truncation order 2 had no measurable effect | Score **monotonically increasing**: 0.0018 / 0.054 / 0.290 / 0.495 / 0.830 / 0.894 / **0.9926** at scale 0.1 / 0.3 / 0.5 / 0.7 / 0.842 / 0.9 / 1.0, and 0.9897 at 1.2× (over-drive penalised). Order 2 now reduces the quasi-energy error **5–31×** | `D10:` |
+| 12 | D11 | `PhysicsInformedSpectralObserver` alias added; docstring, README and evidence matrix state plainly that the module is a five-mode regularized Fourier MAP estimator with no neural network and no learned operator; **harmonic-aware Kalman filter** baseline added to separate the prior from the method | Only plain Kalman / dead-reckoning / last-hold baselines, so the margin could have been entirely the prior | Prior explains ≈ **¾** of the margin; the residual ≈ 20 % belongs to the batch form, which is a **smoother, not a causal filter** | `D11:` |
+
+### Findings from D7 — the coupling has the wrong SIGN, not just the wrong size
+
+The dipolar phase-coupling torque between two co-rotating dipoles separated by `r` at polar
+angle `ψ` to the drive axis has the secular form
+
+&nbsp;&nbsp;&nbsp;&nbsp;`τ = (μ₀m²/4πr³)·(1.5 sin²ψ − 1)·sin(θ₂ − θ₁)`,
+
+so `K = (μ₀m²/4πζ_r)·Σ_j (1.5 sin²ψ_ij − 1)/r_ij³`. The geometric factor is **+0.5** for a
+neighbour in the rotation plane, **−1** for one along the drive axis, zero at `sin²ψ = 2/3`, and
+its **isotropic average is exactly zero**. Three controls confirm the implementation:
+
+| Control geometry | K (rad/s) | Expected |
+| :--- | :--- | :--- |
+| Axial chain along the drive axis | **−4.36** | negative (factor −1) ✓ |
+| Single layer normal to the drive axis | **+7.59** | positive (factor +0.5) ✓ |
+| Cubic lattice (isotropic, hard-sphere) | **−0.275** | ≈ 0 ✓ |
+
+* **The swarm's own seeding geometry gives a negative coupling.** An axially extended near-wall
+  annular band has most neighbours along the vessel axis, which is the drive axis, so the
+  dipolar torques **anti-align** the phases. Measured K = −2.22 / −1.65 / −0.55 rad/s at
+  15 / 30 / 50 µm. The preregistered +4.50 is wrong in sign and 2–8× too large in magnitude.
+* **Answering Argon's question directly — no moment or density reaches K_c in this geometry.**
+  Because the sign is negative, increasing the moment or the density makes the anti-alignment
+  *stronger*. The only positive-coupling arrangements, and what they would need:
+
+| Arrangement | K (rad/s) | Moment needed for K_c ≈ 16.7 |
+| :--- | :--- | :--- |
+| Modeled near-wall shell, 10 000 at 250 µm | **−1.63** | none — wrong sign |
+| Compact 50 µm full-lumen plug, 6 000 | **−0.51** | none — compact is isotropic |
+| Single-layer cross-sectional disc (278 fit) | **+3.22** | **2.28× the moment** (M_eff 1152 A/m) |
+| 3-layer cross-sectional disc, 600 | +2.24 | 2.74× (M_eff 1383 A/m) |
+| Near-wall shell, spin axis along the vessel radius | +0.75 | 4.71× |
+
+* **A mistake I made and caught, recorded because it changed the answer by an order of
+  magnitude.** My first pass sampled the "compact cluster" *without* a hard-sphere minimum
+  separation. Overlapping centres make `1/r³` diverge, and the sum was then dominated by a few
+  accidentally-touching pairs at random orientations: it reported **K = +24.1 rad/s**, above
+  `K_c`, which would have been a false positive result. The isotropic-lattice control
+  (−0.275 ≈ 0) is what exposed it, and every geometry is now hard-sphere sampled.
+* **The preregistered dose does not physically fit the preregistered geometry.** At d = 15 µm
+  only **3 819 of the 10 000** particles (38 %) can be placed in the near-wall band over 250 µm
+  without overlap; at 150 µm span even the 30 µm vessel is above random close packing
+  (φ = 0.52). This is a constraint on the registered design, not a solver failure, and the
+  sampler now reports the shortfall rather than silently producing overlaps.
+
+### Findings from D8 — a unit inconsistency, and a ratio that is 45× off
+
+* **`H_eff` is dimensionally inconsistent.** It is assembled from field amplitudes in **mT** and
+  then used in `exp(−iHt)` with `t` in seconds, i.e. mT is being read as rad/s. The physical
+  conversion is `m/ζ_r` per tesla → **70.22 (mT·s)⁻¹**, so ‖H_eff‖ is really **799 rad/s**, not
+  11.4. The Hamiltonian is left untouched because it carries a preregistered threshold; the
+  conversion is exposed as `mT_to_rad_s` so the physical scale can be stated without rescaling it.
+* **The derived ratio is γ/‖H‖ = 0.747, against a preregistered 0.0167 — 45× too small.** Both
+  scales carry the same `m B / ζ_r` factor, so the ratio is what the dynamics see and it is not
+  a free choice.
+* **The attractor overlap is still 0.663, below the (non-preregistered) 0.80.** Deriving γ from
+  physics raises it from 0.622 to 0.663 and nothing further: reaching 0.80 at steady state needs
+  a ratio near 3.3, i.e. ~4.4× more dissipation than the physics of this particle provides.
+
+### Findings from D9 — the criterion was testing the wrong property
+
+* The verdict is now **true**: p = 2.74 is a bounded polynomial exponent with a power law that
+  fits (residual 0.52 in log₂), and the margin over the unstructured global-cost baseline is
+  111.3 orders. The measured variance at N = 200 is 1.65×10⁻⁶, **below the old 1e−3 floor**, and
+  that is exactly the point: a polynomially decaying quantity crosses any fixed constant, here
+  at about N = 24. A fixed floor would reject an ansatz that is genuinely plateau-free.
+* `step17` has been **split** so the two independent claims can be judged separately instead of
+  one masking the other: the barren-plateau assertion now passes on its own, and the attractor
+  overlap remains a recorded failure.
+
+### Findings from D10 — the score is now falsifiable, and the CBF trade-off is finally visible
+
+* The step-out knee is where the physics puts it: at `scale = 80/95 = 0.842` the α rotation rate
+  breaks from 80 Hz and the score drops from 0.894 to 0.830. Below that it collapses.
+* **The CBF ablation direction has reversed, and is now the physical one.** With the applied
+  field recorded (step 6e) and the score falsifiable (D10), the filtered arm scores **lower**
+  (0.9064 vs 0.9485 over 4 s at d = 15 µm) because the filter drives the 80 Hz sub-swarm toward
+  step-out. Before D10 the filtered arm scored *higher*, which made the claim "the CBF preserves
+  dual-task fidelity" unfalsifiable. It is now a real trade-off that can be measured: safety
+  costs actuation fidelity.
+* Over the full 10 s horizon the mean fidelity is 0.9416 / 0.9319 / 0.9402 at 30 / 15 / 50 µm —
+  above the preregistered 0.92, but the margin is thin and horizon-dependent (0.9064 at 4 s,
+  d = 15 µm, i.e. **below 0.92**). Any claim about this endpoint must state the horizon.
+* The second-order Magnus term is now real and measurably helps: quasi-energy error improves
+  **5.1× / 8.5× / 17× / 31×** at 12 / 20 / 40 / 80 Hz, with the order-1 error scaling as ~ω⁻²
+  and order-2 as ~ω⁻³, as the expansion predicts.
+* **A second mistake of mine, caught by its own test.** My first validation compared the full
+  `H_eff` matrix against `i·log U(T)/T` and showed the new term making things *worse*
+  (1.5505 vs 1.5441). The cause is that the van Vleck effective Hamiltonian and the
+  Floquet–Magnus Hamiltonian read off the propagator at `t₀ = 0` differ by a kick (gauge)
+  operator at O(1/ω), so those two matrices never converge to each other. The **quasi-energy
+  spectrum is gauge-invariant** and does converge. Comparing gauge-dependent objects would have
+  led me to discard a correct formula.
+
+### Findings from D11 — the margin is the prior, and the estimator is a smoother
+
+| Blind window | Spectral MAP | Harmonic-aware Kalman | Plain Kalman | Dead reckoning |
+| :--- | :--- | :--- | :--- | :--- |
+| 50 ms | 0.968 µm | 1.175 µm | 1.674 µm | 1.770 µm |
+| 100 ms | 1.189 µm | 1.483 µm | 2.531 µm | 2.981 µm |
+| 200 ms | 2.520 µm | 2.978 µm | 5.082 µm | 5.122 µm |
+
+* **About three quarters of the margin over a plain Kalman filter is the physics prior**, not the
+  estimator: a Kalman filter given the same cardiac-harmonic model recovers most of it. The
+  honest claim is therefore *"knowing the cardiac waveform helps"*, not *"a neural-operator-style
+  estimator is needed"*.
+* The residual ≈ 20 % belongs to the batch MAP form, and it must be labelled: the batch fit uses
+  the whole window, including samples **later** than the instant it estimates, so it is a
+  **smoother, not a causal filter**. For real-time use inside the blind window the harmonic-aware
+  Kalman filter is the fair comparator — and it also clears the < 8.0 µm ceiling at every window,
+  so the preregistered endpoint does not depend on the non-causal form.
+* The module is now named accurately in the code, the README and the evidence matrix, and
+  Appendix B records the three method-to-citation mismatches (B2 neural operator, B4 reduced-order
+  Lindblad, B7 Pennes) with what each citation does and does not support.
