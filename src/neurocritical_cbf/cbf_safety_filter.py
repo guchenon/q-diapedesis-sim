@@ -144,7 +144,7 @@ class NeurocriticalCBFSafetyFilter:
             # h_shear = effective_tau_max - (tau_hydro + z[0] * tau_robot_nom) + slack >= 0
             total_shear = float(hydrodynamic_wall_shear_Pa) + z[0] * nom_robot_shear
             h_s = effective_tau_max - total_shear
-            return self.kappa_shear * h_s + z[2]
+            return self.kappa_shear * h_s
 
         def cbf_thermal_constraint(z: np.ndarray) -> float:
             # L_f h_thermal + L_g h_thermal * z[0] + kappa_thermal * h_thermal + slack >= 0
@@ -192,7 +192,9 @@ class NeurocriticalCBFSafetyFilter:
                 scale_opt = min(scale_opt, 0.25)
             recanal_opt = float(min(nominal_recanal_rate_inv_s, max_recanal_rate))
             slack_opt = 0.0
-
+        # Hard safety projection: guarantee the shear barrier regardless of solver tolerance
+        avail_shear_final = max(0.0, effective_tau_max - float(hydrodynamic_wall_shear_Pa))
+        scale_opt = float(np.clip(min(scale_opt, avail_shear_final / max(nom_robot_shear, 1e-6)), 0.05, 1.0))
         # Preserve drive frequency (80 Hz / 5 Hz Floquet resonance) while scaling B-field amplitude
         safe_b_mT = float(nominal_b_mT) * scale_opt
         safe_freq_Hz = float(nominal_freq_Hz)
