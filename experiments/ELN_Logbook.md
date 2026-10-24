@@ -63,3 +63,17 @@ D1-c (keep 5.50 Pa; fix H1; add distal bed resistance calibrated to physiologica
 **Findings from step 4 (reported, not tuned):**
 * At 15 µm the open-vessel hydrodynamic shear alone (5.93 Pa) exceeds the 5.50 Pa ceiling, so the preregistered ceiling cannot hold for the narrowest vessel in the sweep once recanalization completes.
 * With the CPP/pH gate now enforced (step 3), the full controller recanalizes only ~41% of the clot in the configured 10 s horizon; the open-vessel regime is therefore not reached within 10 s.
+| 5 | C4 (D4), M1 (part) | Removed ×1.95 / ×1.8 multipliers (CBF-off applies the same nominal command); new `enable_pulsed_pH_buffering` switch separate from `enable_cbf_filter`; `stop_at_recanalized_fraction` for iso-recanalization checkpoints; default horizon from `simulation_meta.total_time_seconds` (10 s); peak CPP surge added to `all_hypotheses_passed` (preregistered 2.50 mmHg/s); `mode_label` names every disabled module; `step20` now runs 10 s. Tests `tests/test_ablation_fairness.py` written first (4 failed before) | CBF-off (3 s): field ×1.95, rate ×1.8, pH buffering also off; rf 1.00 vs 0.39 for the full system | See table below | `D4:` |
+
+**Step 5 ablation results, d = 30 µm (preregistered thresholds; PASS = all gated hypotheses):**
+
+| Configuration | Equal time 10 s: rf / peak τ / glycocalyx / NETosis / peak CPP surge / PASS | Iso-recanalization (rf = 0.41): time / peak τ / glycocalyx / peak CPP surge / PASS |
+| :--- | :--- | :--- |
+| Full | 0.41 / 3.58 Pa / 0.993 / 0.000 / 2.02 / PASS | 10.0 s / 3.58 / 0.993 / 2.02 / PASS |
+| No CBF | 1.00 / 6.73 Pa / 0.846 / 0.013 / 5.76 / FAIL | 1.3 s / 3.57 / 0.999 / 5.76 / FAIL (CPP only) |
+| No bimodal Floquet | as full; fidelity 0.523 / FAIL | as full; FAIL (fidelity) |
+| No catch-bond | as full; washout 4.24%, retrieval 0.9884 / FAIL | same / FAIL |
+| No degaussing | as full; retrieval 0.8679 / FAIL | same / FAIL |
+| No pH buffering | 0.39 / 3.58 / 0.991 / 0.000 / 2.00 / PASS (final pH 6.67 vs 6.78) | 11.05 s / 3.58 / 0.990 / 2.00 / PASS |
+
+**Findings from step 5:** At equal progress the CBF's measurable benefit is the CPP surge limit; its shear/glycocalyx protection only appears once recanalization goes further than the full controller reaches in 10 s. Pulsed pH buffering changes the 10 s outcome very little (pH 6.78 vs 6.67) because buffering is slow relative to the horizon. NETosis and final pH have no preregistered end-of-episode threshold, so they are reported but not gated.

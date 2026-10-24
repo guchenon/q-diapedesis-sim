@@ -98,7 +98,8 @@ def test_step20_closed_loop_pipeline_and_diameter_sweep():
     # Audit Table Row 1a/1b: verify closed-loop pipeline at 15, 30, and 50 um diameters
     for d_um in (15.0, 30.0, 50.0):
         pipeline = QDiapedesisClosedLoopPipeline(vessel_diameter_um=d_um)
-        summary = pipeline.run_episode(total_time_s=3.0, dt_s=0.05)
+        # Full configured horizon (simulation_meta.total_time_seconds = 10 s), D4 / ELN #003
+        summary = pipeline.run_episode(dt_s=0.05)
         assert summary.all_hypotheses_passed is True
         assert summary.peak_wall_shear_Pa <= 5.50 + 1e-3
         assert summary.glycocalyx_retained_ratio >= 0.92
