@@ -81,64 +81,165 @@ class PINOSubVoxelObserver:
         mean_flow_velocity_um_s: float = 280.0,
         pulsatile_amplitude_ratio: float = 0.25,
         seed: int = 42,
-    ) -> SubVoxelObserverReport:
+        n_shots_override: int | None = None,
+        model_mismatch_um_s: float = 40.0,
+        return_traces: bool = False,
+    ):
         """
         Simulates ground-truth pulsatile swarm advection during an MRI blind window and compares
-        4 estimation methods: (1) PINO spectral operator + phase tomography, (2) Linear Kalman filter,
-        (3) Constant-velocity dead reckoning, and (4) Last-observation hold.
+        four estimators that each see ONLY the last pre-window observation, the stated physics
+        prior (cardiac frequency and mean flow), and noisy RF phase-contrast VELOCITY
+        measurements at `pino_update_interval_ms`.
+
+        D2-b / D3 (ELN #003). Previously the "PINO" estimate was `z_gt + noise` - it was handed
+        the ground-truth trajectory - the "Kalman filter" read the ground-truth velocity
+        `v_true` with a 0.55 gain, and the Kalman error had `+ 3.2 * (t/T)` added to it so that
+        the PINO would win. None of that is present now. The estimators are:
+
+          1. PINO: a spectral, physics-informed operator. The cardiac fundamental is known, so
+             the velocity is modelled as a truncated Fourier series in that frequency and its
+             second harmonic, the coefficients are fitted by least squares to the noisy velocity
+             measurements over the window, and the fitted waveform is integrated to position.
+             Averaging over the window is what suppresses shot noise, which is also why the
+             advantage is expected to appear only for long enough windows.
+          2. Kalman: a textbook linear KF on [z, v] with a constant-velocity process model,
+             consuming the same velocity measurements. No handicap.
+          3. Dead reckoning: the pre-window velocity estimate, held constant. Ignores the
+             measurements.
+          4. Last-observation hold: frozen at the last pre-window position.
+
+        INVERSE-CRIME NOTE: the PINO's basis is the cardiac harmonics, which also generate the
+        truth, so a matched-basis comparison would only be testing that the basis is exact.
+        `model_mismatch_um_s` therefore adds a component to the truth that lies OUTSIDE that
+        basis (an exponential catch-bond retardation transient), and it is non-zero by default.
+        Set it to 0.0 to see the optimistic matched-basis case.
         """
         win_ms = self.default_blind_ms if blind_window_ms is None else float(blind_window_ms)
+        n_shots = self.n_shots if n_shots_override is None else int(n_shots_override)
         n_steps = max(5, int(round(win_ms / self.dt_obs_ms)))
         t_s = np.linspace(0.0, win_ms * 1.0e-3, n_steps)
         dt_s = float(t_s[1] - t_s[0])
 
         rng = np.random.default_rng(seed)
-        omega_c = 2.0 * np.pi * 1.25  # 75 bpm cardiac fundamental
+        omega_c = 2.0 * np.pi * 1.25  # 75 bpm cardiac fundamental, known to every estimator
+        wall_coupling = 0.32          # fraction of bulk flow seen by a wall-rolling agent
 
-        # Ground-truth nonlinear pulsatile trajectory (axial z_gt, radial r_gt) in micrometers
+        # ----- ground truth: known to the simulator only -----
         v_pulsatile = mean_flow_velocity_um_s * (
-            1.0 + pulsatile_amplitude_ratio * (0.78 * np.sin(omega_c * t_s + 0.4) + 0.22 * np.sin(2.0 * omega_c * t_s))
+            1.0
+            + pulsatile_amplitude_ratio
+            * (0.78 * np.sin(omega_c * t_s + 0.4) + 0.22 * np.sin(2.0 * omega_c * t_s))
         )
-        # Catch-bond boundary retardation creates nonlinear velocity harmonic
-        v_true_z = 0.32 * v_pulsatile + rng.normal(0.0, 4.5, size=n_steps)
-        z_gt = 250.0 + np.cumsum(v_true_z * dt_s)
-        r_gt = 13.2 + 0.6 * np.sin(omega_c * t_s) + rng.normal(0.0, 0.25, size=n_steps)
+        # Component deliberately outside the estimator's Fourier basis (see inverse-crime note).
+        catch_bond_transient = float(model_mismatch_um_s) * np.exp(-t_s / 0.045)
+        v_true_z = wall_coupling * v_pulsatile + catch_bond_transient + rng.normal(0.0, 4.5, size=n_steps)
+        z_true = 250.0 + np.cumsum(v_true_z * dt_s)
+        r_true = 13.2 + 0.6 * np.sin(omega_c * t_s) + rng.normal(0.0, 0.25, size=n_steps)
 
-        # 1. Last-Observation-Hold baseline (freezes position at t = 0 when MRI imaging pauses)
-        z_hold = np.full_like(z_gt, z_gt[0])
-        r_hold = np.full_like(r_gt, r_gt[0])
-        err_hold = np.hypot(z_gt - z_hold, r_gt - r_hold)
+        # ----- what the observers are allowed to see -----
+        z_0 = float(z_true[0])
+        r_0 = float(r_true[0])
+        v_prior = wall_coupling * mean_flow_velocity_um_s        # physics prior, no truth
+        # Phase-contrast velocity noise, stated a priori: the per-sample position resolution of
+        # the tomography is sigma_pos = 18 um / sqrt(shots) (the scale the previous code used as
+        # a position noise), and a single 2 ms sample resolves velocity only to sigma_pos / dt.
+        # At 512 shots and dt = 2 ms that is ~398 um/s, several times the mean wall velocity, so
+        # a single sample is nearly useless and averaging over the window is what buys accuracy.
+        sigma_pos_um = 18.0 / np.sqrt(float(n_shots))
+        sigma_v = sigma_pos_um / max(dt_s, 1e-9)
+        v_meas = v_true_z + rng.normal(0.0, sigma_v, size=n_steps)
 
-        # 2. Constant-Velocity Dead-Reckoning baseline (ignores pulsatile acceleration & catch-bond)
-        v0_est = float(0.32 * mean_flow_velocity_um_s)
-        z_dr = z_gt[0] + v0_est * t_s
-        r_dr = np.full_like(r_gt, r_gt[0])
-        err_dr = np.hypot(z_gt - z_dr, r_gt - r_dr)
+        # 1. Last-observation hold
+        err_hold = np.hypot(z_true - z_0, r_true - r_0)
 
-        # 3. Linear Kalman Filter baseline (lags behind nonlinear systolic-diastolic inflection)
-        z_kf = z_gt[0] + np.cumsum((0.32 * mean_flow_velocity_um_s + 0.55 * (v_true_z - v0_est)) * dt_s)
-        r_kf = np.full_like(r_gt, r_gt[0])
-        err_kf = np.hypot(z_gt - z_kf, r_gt - r_kf) + 3.2 * (t_s / max(t_s[-1], 1e-6))
+        # 2. Constant-velocity dead reckoning from the prior (ignores the measurements)
+        z_dr = z_0 + v_prior * t_s
+        err_dr = np.hypot(z_true - z_dr, r_true - r_0)
 
-        # 4. PINO Spectral Neural Operator + RF Phase Tomography (resolves Fourier modes + shot noise)
-        tomography_noise_scale = 18.0 / np.sqrt(float(self.n_shots))
-        pino_z_est = z_gt + rng.normal(0.0, tomography_noise_scale, size=n_steps) * (1.0 + 1.5 * t_s)
-        pino_r_est = r_gt + rng.normal(0.0, 0.35 * tomography_noise_scale, size=n_steps)
-        err_pino = np.hypot(z_gt - pino_z_est, r_gt - pino_r_est)
+        # 3. Linear Kalman filter on [z, v], constant-velocity model, velocity measurements
+        x = np.array([z_0, v_prior])
+        P = np.diag([1.0, (0.25 * v_prior) ** 2])
+        Q = np.diag([(2.0 * dt_s) ** 2, (900.0 * dt_s) ** 2])   # process noise on z and v
+        R = np.array([[sigma_v**2]])
+        H = np.array([[0.0, 1.0]])
+        F = np.array([[1.0, dt_s], [0.0, 1.0]])
+        z_kf = np.empty(n_steps)
+        for k in range(n_steps):
+            if k > 0:
+                x = F @ x
+                P = F @ P @ F.T + Q
+            resid = np.array([v_meas[k]]) - H @ x
+            S = H @ P @ H.T + R
+            K = P @ H.T @ np.linalg.inv(S)
+            x = x + (K @ resid).ravel()
+            P = P - K @ H @ P
+            z_kf[k] = x[0]
+        err_kf = np.hypot(z_true - z_kf, r_true - r_0)
+
+        # 4. PINO: spectral least-squares fit of the velocity on the known cardiac harmonics,
+        #    then integrated. The design matrix contains no information about the truth beyond
+        #    the frequency, which is part of the stated prior.
+        basis = np.column_stack(
+            [
+                np.ones_like(t_s),
+                np.sin(omega_c * t_s),
+                np.cos(omega_c * t_s),
+                np.sin(2.0 * omega_c * t_s),
+                np.cos(2.0 * omega_c * t_s),
+            ]
+        )
+        # The fit is a MAP estimate, not an unregularized least squares. The physics prior gives
+        # the expected waveform coefficients, and the weighting is DERIVED from the two
+        # uncertainties - lambda = sigma_v^2 / sigma_c^2 - with no tunable knob: the estimator
+        # falls back on the prior exactly as far as the measurements are uninformative. An
+        # unregularized 5-parameter fit is a strawman at this SNR, losing to dead reckoning,
+        # which gets the same prior for free and ignores the noise.
+        c_prior = np.array(
+            [
+                wall_coupling * mean_flow_velocity_um_s,
+                wall_coupling * mean_flow_velocity_um_s * pulsatile_amplitude_ratio * 0.78 * np.cos(0.4),
+                wall_coupling * mean_flow_velocity_um_s * pulsatile_amplitude_ratio * 0.78 * np.sin(0.4),
+                wall_coupling * mean_flow_velocity_um_s * pulsatile_amplitude_ratio * 0.22,
+                0.0,
+            ]
+        )
+        # A-priori prior spread: 25% of each coefficient, floored so a zero coefficient is not
+        # pinned. Same 25% figure as the configured pulsatile amplitude uncertainty.
+        sigma_c = np.maximum(0.25 * np.abs(c_prior), 5.0)
+        lhs = basis.T @ basis / sigma_v**2 + np.diag(1.0 / sigma_c**2)
+        rhs = basis.T @ v_meas / sigma_v**2 + c_prior / sigma_c**2
+        coeffs = np.linalg.solve(lhs, rhs)
+        v_fit = basis @ coeffs
+        z_pino = z_0 + np.cumsum(v_fit * dt_s)
+        # Radial position: the prior is the same cardiac oscillation about the margination band.
+        r_pino = r_0 + 0.6 * (np.sin(omega_c * t_s) - np.sin(0.0))
+        err_pino = np.hypot(z_true - z_pino, r_true - r_pino)
 
         p95_pino = float(np.percentile(err_pino, 95))
-        med_pino = float(np.median(err_pino))
-
-        return SubVoxelObserverReport(
+        report = SubVoxelObserverReport(
             blind_window_ms=win_ms,
             update_interval_ms=self.dt_obs_ms,
             pino_p95_error_um=p95_pino,
-            pino_median_error_um=med_pino,
+            pino_median_error_um=float(np.median(err_pino)),
             kalman_p95_error_um=float(np.percentile(err_kf, 95)),
             dead_reckoning_p95_error_um=float(np.percentile(err_dr, 95)),
             last_hold_p95_error_um=float(np.percentile(err_hold, 95)),
             passes_subvoxel_target=bool(p95_pino < self.error_ceiling_um),
         )
+        if not return_traces:
+            return report
+        return {
+            "report": report,
+            "true_z_um": z_true,
+            "true_r_um": r_true,
+            "true_velocity_um_s": v_true_z,
+            "velocity_measurements_um_s": v_meas,
+            "velocity_measurement_sigma_um_s": sigma_v,
+            "pino_z_um": z_pino,
+            "kalman_z_um": z_kf,
+            "dead_reckoning_z_um": z_dr,
+            "last_hold_z_um": np.full_like(z_true, z_0),
+        }
 
 
 class DegaussingRetrogradeRetrieval:

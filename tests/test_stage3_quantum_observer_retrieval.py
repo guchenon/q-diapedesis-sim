@@ -69,15 +69,14 @@ def test_step17_lindblad_dissipation_and_equivariant_ttn_barren_plateau():
     assert bp_bench["variance_improvement_orders_of_magnitude"] >= 10.0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "C2 (ELN #002): PINO p95 loses to dead reckoning at 50 ms (1.21 vs 0.69 um) "
-        "and 100 ms (1.65 vs 1.47 um); reported as a negative result until D2-b. "
-        "Thresholds unchanged."
-    ),
-)
 def test_step18_pino_subvoxel_observer_across_blind_windows():
+    # xfail removed under D2-b (ELN #003). The earlier failure - PINO losing to dead reckoning
+    # at 50 and 100 ms - was measured against an "observer" that was ground truth plus noise and
+    # baselines that read the ground-truth velocity, one of them with an added error handicap.
+    # With real estimators that see only the initial condition, the physics prior and noisy
+    # phase-contrast measurements, this now passes at all three windows on its own merits.
+    # Read the findings in ELN #003 before quoting the margin: the advantage comes from the
+    # cardiac-waveform prior, and nothing in this module is a neural network.
     observer = PINOSubVoxelObserver()
     for win_ms in (50.0, 100.0, 200.0):
         rep = observer.evaluate_blind_window_tracking(blind_window_ms=win_ms)
