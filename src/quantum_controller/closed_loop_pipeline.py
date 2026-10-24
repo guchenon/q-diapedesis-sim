@@ -199,7 +199,18 @@ class QDiapedesisClosedLoopPipeline:
 
             peak_shear_history.append(float(np.max(hemo_step.wall_shear_stress_Pa)))
             peak_temp_history.append(physio_state.brain_temp_elevation_C)
-            fidelity_history.append(floquet_nom.dual_task_fidelity)
+            # D3 / 6e (ELN #003): record the fidelity of the field that was actually APPLIED.
+            # This previously appended `floquet_nom.dual_task_fidelity`, evaluated at the
+            # nominal command, so the CBF filter's reduction of the field could not appear in
+            # the recorded fidelity at all and the CBF ablation compared one number to itself.
+            applied_scale = act_b_mT / max(self.floquet.b_alpha_nom_mT, 1e-12)
+            floquet_applied = self.floquet.evaluate_control_step(
+                time_s=t_s,
+                b_scale_factor=applied_scale,
+                f_alpha_override_Hz=80.0,
+                f_beta_override_Hz=f_beta,
+            )
+            fidelity_history.append(floquet_applied.dual_task_fidelity)
             washout_history.append(swarm_state.transient_washout_percent)
             cpp_surge_history.append(self.cbf.Surge_mmHg_per_recanal_rate * act_recanal_rate)
             nominal_b_history.append(float(nom_b_mT))

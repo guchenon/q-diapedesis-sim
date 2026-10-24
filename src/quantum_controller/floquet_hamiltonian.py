@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict
 import numpy as np
 import yaml
+from scipy.linalg import expm
 
 
 @dataclass
@@ -121,6 +122,90 @@ class BimodalFloquetController:
         freq_ratio_sq = (fb / max(fa, 1.0)) ** 2
         h_2 = 0.15 * freq_ratio_sq * float(b_alpha_mT * b_beta_mT) * self.sigma_z / omega_a
         return h_0 + h_1 + h_2
+
+    def bimodal_drive_hamiltonian(
+        self,
+        time_s: float,
+        b_alpha_mT: float,
+        b_beta_mT: float,
+        f_alpha_Hz: float | None = None,
+    ) -> np.ndarray:
+        """
+        The time-dependent bimodal drive itself, written so that its Fourier components are
+        exactly the terms `compute_floquet_magnus_hamiltonian` expands (D3, ELN #003):
+
+            H(t) = (B_static/2) sigma_z + (B_beta/2) sigma_x
+                   + (B_alpha/2) [cos(omega_a t) sigma_x + sin(omega_a t) sigma_y]
+
+        so H_0 = (B_static/2) sigma_z + (B_beta/2) sigma_x and
+        H_{+-1} = (B_alpha/4)(sigma_x -+ i sigma_y). The slow beta mode is taken as static over
+        one alpha period, which is the adiabatic separation the class docstring assumes
+        (f_beta = 5 Hz vs f_alpha = 80 Hz).
+        """
+        fa = self.f_alpha_Hz if f_alpha_Hz is None else float(f_alpha_Hz)
+        omega_a = 2.0 * np.pi * max(fa, 1.0)
+        phase = omega_a * float(time_s)
+        return (
+            0.5 * self.b_static_mT * self.sigma_z
+            + 0.5 * float(b_beta_mT) * self.sigma_x
+            + 0.5 * float(b_alpha_mT) * (np.cos(phase) * self.sigma_x + np.sin(phase) * self.sigma_y)
+        )
+
+    def exact_one_period_propagator(
+        self,
+        b_alpha_mT: float,
+        b_beta_mT: float,
+        f_alpha_Hz: float | None = None,
+        n_substeps: int = 2048,
+    ) -> np.ndarray:
+        """
+        Numerically exact stroboscopic propagator U(T) for one alpha drive period, obtained by
+        a midpoint product of short-time exponentials of the true H(t) above. Convergence in
+        `n_substeps` is asserted in tests/test_floquet_propagator_fidelity.py.
+        """
+        fa = self.f_alpha_Hz if f_alpha_Hz is None else float(f_alpha_Hz)
+        period_s = 1.0 / max(fa, 1.0)
+        dt = period_s / int(n_substeps)
+        u = np.eye(2, dtype=complex)
+        for k in range(int(n_substeps)):
+            t_mid = (k + 0.5) * dt
+            h = self.bimodal_drive_hamiltonian(t_mid, b_alpha_mT, b_beta_mT, fa)
+            u = expm(-1.0j * h * dt) @ u
+        return u
+
+    def magnus_propagator_fidelity(
+        self,
+        b_alpha_mT: float,
+        b_beta_mT: float,
+        f_alpha_Hz: float | None = None,
+        f_beta_Hz: float | None = None,
+        truncation_order: int | None = None,
+    ) -> float:
+        """
+        Average gate fidelity between the exact one-period propagator and the propagator the
+        truncated Floquet-Magnus effective Hamiltonian predicts:
+
+            F = |Tr(U_magnus^dagger U_exact)|^2 / d^2,   d = 2
+
+        This is a real, computed fidelity obtained by evolving a state, and it is the quantity
+        that tells you whether the Floquet engineering in `compute_floquet_magnus_hamiltonian`
+        is accurate. It is NOT the preregistered `dual_task_fidelity`, which is a weighted
+        design score (see `evaluate_control_step`); the two measure different things and are
+        reported separately on purpose (D3, ELN #003).
+        """
+        fa = self.f_alpha_Hz if f_alpha_Hz is None else float(f_alpha_Hz)
+        order_before = self.truncation_order
+        if truncation_order is not None:
+            self.truncation_order = int(truncation_order)
+        try:
+            h_eff = self.compute_floquet_magnus_hamiltonian(b_alpha_mT, b_beta_mT, fa, f_beta_Hz)
+        finally:
+            self.truncation_order = order_before
+        period_s = 1.0 / max(fa, 1.0)
+        u_magnus = expm(-1.0j * h_eff * period_s)
+        u_exact = self.exact_one_period_propagator(b_alpha_mT, b_beta_mT, fa)
+        overlap = np.trace(u_magnus.conj().T @ u_exact)
+        return float(abs(overlap) ** 2 / 4.0)
 
     def evaluate_control_step(
         self,
