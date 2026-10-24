@@ -62,7 +62,7 @@ class QDiapedesisClosedLoopPipeline:
 
         self.flow = PriesSecombPulsatileFlow(geometry=self.geom)
         self.margination = LeukocyteCatchBondMargination()
-        self.swarm = HydroMagneticSolitonSwarm()
+        self.swarm = HydroMagneticSolitonSwarm(lumen_diameter_um=self.geom.diameter_um)
         self.floquet = BimodalFloquetController()
         self.lindblad_ttn = LindbladEquivariantTTN()
         self.glyco = EndothelialGlycocalyxModel(n_axial_nodes=120)
@@ -105,6 +105,7 @@ class QDiapedesisClosedLoopPipeline:
         peak_shear_history: List[float] = []
         peak_temp_history: List[float] = []
         fidelity_history: List[float] = []
+        axial_velocity_history: List[float] = []
         washout_history: List[float] = []
         cpp_surge_history: List[float] = []
         nominal_b_history: List[float] = []
@@ -198,6 +199,7 @@ class QDiapedesisClosedLoopPipeline:
             )
 
             peak_shear_history.append(float(np.max(hemo_step.wall_shear_stress_Pa)))
+            axial_velocity_history.append(float(np.mean(hemo_step.axial_velocity_mean_um_s)))
             peak_temp_history.append(physio_state.brain_temp_elevation_C)
             # D3 / 6e (ELN #003): record the fidelity of the field that was actually APPLIED.
             # This previously appended `floquet_nom.dual_task_fidelity`, evaluated at the
@@ -220,8 +222,16 @@ class QDiapedesisClosedLoopPipeline:
             if stop_at_recanalized_fraction is not None and recanalized_frac >= float(stop_at_recanalized_fraction):
                 break
 
-        # Evaluate Module B2 (PINO observer) and Module B5 (Degaussing + Retrograde Retrieval)
-        obs_report = self.observer.evaluate_blind_window_tracking()
+        # Evaluate Module B2 (PINO observer) and Module B5 (Degaussing + Retrograde Retrieval).
+        # M1 (ELN #003): this was called with no arguments, so the observer always assumed the
+        # library default 280 um/s mean flow regardless of the simulated hemodynamics or the
+        # vessel diameter the episode was running at. It now receives the episode's own mean
+        # axial velocity and the configured pulsatile amplitude ratio.
+        mean_axial_velocity_um_s = float(np.mean(axial_velocity_history)) if axial_velocity_history else 280.0
+        obs_report = self.observer.evaluate_blind_window_tracking(
+            mean_flow_velocity_um_s=mean_axial_velocity_um_s,
+            pulsatile_amplitude_ratio=self.flow.pulse_amp_ratio,
+        )
         mean_washout = float(np.mean(washout_history))
         ret_report = self.retrieval.execute_post_task_retrieval(
             transient_washout_percent=mean_washout,

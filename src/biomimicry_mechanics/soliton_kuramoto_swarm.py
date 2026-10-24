@@ -52,6 +52,7 @@ class HydroMagneticSolitonSwarm:
         vessel_config_path: Path | str | None = None,
         floquet_config_path: Path | str | None = None,
         seed: int | None = None,
+        lumen_diameter_um: float | None = None,
     ):
         root_dir = Path(__file__).resolve().parent.parent.parent
         if vessel_config_path is None:
@@ -69,7 +70,11 @@ class HydroMagneticSolitonSwarm:
 
         geom = self.vessel_cfg["vessel_geometry"]
         self.vessel_length_um = float(geom["vessel_length_um"])
-        self.lumen_radius_um = 0.5 * float(geom["default_diameter_um"])
+        # M1 (ELN #003): the closed loop can run at 15, 30 or 50 um, but this was always built
+        # from the config default, so an overridden episode placed the swarm in the wrong lumen.
+        diameter_um = float(geom["default_diameter_um"]) if lumen_diameter_um is None else float(lumen_diameter_um)
+        self.lumen_diameter_um = diameter_um
+        self.lumen_radius_um = 0.5 * diameter_um
 
         thrombus = self.vessel_cfg["thrombus_and_microenvironment"]
         self.thrombus_z_um = float(thrombus["thrombus_axial_position_um"])
