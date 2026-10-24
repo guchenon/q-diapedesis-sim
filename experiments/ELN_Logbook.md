@@ -382,3 +382,73 @@ its **isotropic average is exactly zero**. Three controls confirm the implementa
 * The module is now named accurately in the code, the README and the evidence matrix, and
   Appendix B records the three method-to-citation mismatches (B2 neural operator, B4 reduced-order
   Lindblad, B7 Pennes) with what each citation does and does not support.
+
+---
+
+## Log Entry #005 — Identifier & External-Record Sync Audit (OSF / ORCID / Zenodo / GitHub)
+* **Date:** 2026-10-24
+* **Method:** public APIs only (`pub.orcid.org`, `api.osf.io`, `zenodo.org/api`, `api.github.com`)
+  and DOI content negotiation. I have no write access to OSF, ORCID or Zenodo, so everything in
+  the "action" column is for Chanon.
+
+### What resolves, and what it actually points at
+
+| Identifier | Status | What it resolves to | Action needed |
+| :--- | :--- | :--- | :--- |
+| ORCID `0009-0008-1357-9003` | ✅ resolves | **Chanon Singson** — matches `CITATION.cff` | **0 public works.** Neither the Zenodo record nor the OSF project is linked to the profile. Enable the Zenodo→ORCID push so the software record appears. |
+| Zenodo `10.5281/zenodo.23599020` | ✅ resolves, **open access** | Title, author and date all match `CITATION.cff`. Version **`v0.1.0-alpha`**. Archived file: `guchenon/q-diapedesis-sim-v0.1.0-alpha.zip`. Links to GitHub at `tree/v0.1.0-alpha`, relation `isSupplementTo` | This is a **version DOI**, not the concept DOI — see below |
+| Zenodo `10.5281/zenodo.23599019` | ✅ **concept DOI** (all versions) | The record family; always resolves to the newest version | **This is the one to cite.** Added to `CITATION.cff` in this entry |
+| OSF `osf.io/htswk` | ⚠️ `api.osf.io/v2/**nodes**/htswk` → **401 Unauthorized**; `api.osf.io/v2/**registrations**/htswk` → **404 Not Found** | A **private project node**. The 404 on the registrations endpoint means this GUID is not an OSF registration | **Verify and resolve — see the finding below** |
+| GitHub `guchenon/q-diapedesis-sim` | ⚠️ `api.github.com` → **403** | The repository is **not publicly readable** | Decide whether it should be public before any claim of reproducibility is published |
+
+### Findings
+
+1. **`osf.io/htswk` does not look like a preregistration, and the repository calls it one 18 times.**
+   The OSF API returns 401 for the *node* endpoint (the GUID exists but is private) and **404 for
+   the *registration* endpoint**. A public, timestamped, read-only registration on OSF Registries
+   normally answers on the registrations endpoint and carries its own GUID, usually with a DOI.
+   The evidence therefore points to `htswk` being a **private project**, not a registration.
+   I cannot be certain from outside — a withdrawn or embargoed registration could also behave
+   oddly — so this needs checking from inside the account, but until it is checked, every
+   sentence in the README, the ELN and the source headers that says *"preregistered on the Open
+   Science Framework (OSF Registries)"* is **not supported by anything a reader can verify**.
+   This is the single most load-bearing claim in the project and it is currently unverifiable.
+   Either register the protocol properly on OSF Registries and cite that registration's own
+   GUID/DOI, or change the wording from "preregistered" to "protocol document on OSF".
+2. **The archived DOI contains no simulation code, and 15 source files imply it does.** Every
+   module header ends with *"Part of the Q-DIAPEDESIS Framework (OSF: … | DOI:
+   10.5281/zenodo.23599020)"*, but that DOI is pinned to `v0.1.0-alpha`, whose archive holds
+   **configs and `test_config_sanity.py` only**. A reader who follows the DOI from
+   `lindblad_ttn.py` will not find `lindblad_ttn.py`. Two things to decide: whether those headers
+   should cite the **concept** DOI `…23599019` instead (so they track the latest archive), and
+   whether to cut a new release so the code is actually archived. **I have not rewritten the 15
+   headers** — that changes attribution text across the codebase and is Chanon's and Argon's call.
+3. **The open archive of a closed repository is an asymmetry worth noticing.** The Zenodo record
+   is open access while the GitHub repository is private, so the only publicly obtainable
+   artifact is the configs-only zip. Anyone trying to reproduce the results cannot.
+4. **`CITATION.cff` was out of sync and is partly fixed here.** It listed only the OSF URL — no
+   Zenodo DOI at all, despite 15 files citing one — and no `repository-code`. Both are added,
+   together with the distinction between the concept and version DOIs. Still stale and left for
+   Chanon: `version: 0.1.0` and `date-released: 2026-10-23`, which now sit 17 commits behind
+   `HEAD`; these should be bumped when the next release is cut, not invented here.
+5. **The preregistration tag itself is intact.** `v0.1.0-alpha` still points at `b5899d7`, and
+   `experiments/check_continuity.py` now asserts that on every run, so a rewrite of the
+   preregistration snapshot would fail CI rather than pass silently.
+
+### Continuity audit added in the same pass
+
+`experiments/check_continuity.py` (59 checks, all passing) walks the chain
+**config → derivation → model → test → docs** and fails if any link breaks:
+
+* every preregistered threshold still holds its registered value (shear 5.50 Pa, glycocalyx 0.92,
+  ΔT 0.30 °C, CPP 70 mmHg, pH 6.65/7.35, F* 15 pN, washout 2.0 %, 80/5 Hz, χ = 16, fidelity 0.92);
+* the `v0.1.0-alpha` tag still points at `b5899d7`;
+* the derived parameters reproduce the numbers quoted in ELN #004 (moment 8.935×10⁻¹⁶ A·m²,
+  γ 6.711, mT→rad/s 70.22, K = −2.22/−1.65/−0.55);
+* the models actually consume the derived values instead of falling back to the free numbers;
+* every `xfail` is `strict=True` and cites an ELN entry;
+* every path named in the README exists.
+
+It earned its keep immediately: it caught an **unterminated code fence** in the README — the
+repository-structure block was never closed, so on GitHub everything after it rendered as code —
+and the missing `src/physics/` entry in the tree. Both fixed.

@@ -9,10 +9,21 @@ authors:
   - family-names: "Singson"
     given-names: "Chanon"
     orcid: "https://orcid.org/0009-0008-1357-9003"
+repository-code: "https://github.com/guchenon/q-diapedesis-sim"
 identifiers:
+  # Concept (all-versions) DOI. Cite THIS one: it always resolves to the latest archived
+  # version. Added 2026-10-24 during the identifier-sync audit (ELN #005).
+  - type: doi
+    value: "10.5281/zenodo.23599019"
+    description: "Zenodo concept DOI (all versions)"
+  # Version DOI for the v0.1.0-alpha archive. NOTE: that archive is the preregistration
+  # snapshot and contains configs and config tests ONLY - no simulation code.
+  - type: doi
+    value: "10.5281/zenodo.23599020"
+    description: "Zenodo version DOI for v0.1.0-alpha (configs-only snapshot)"
   - type: url
     value: "https://osf.io/htswk"
-    description: "OSF Preregistered Protocol and Project Repository"
+    description: "OSF project node (see ELN #005: this is a project node, not a public registration)"
 keywords:
   - "microrobotic swarms"
   - "cerebral microcirculation"

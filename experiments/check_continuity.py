@@ -142,6 +142,35 @@ if heading in readme:
 for rel in sorted(named):
     check(f"README path {rel}", (ROOT / rel).exists())
 
+# ------------------------------------------------- 7. identifiers agree across every file
+print("\n7. Identifiers are consistent across README, CITATION.cff, docs and source headers")
+ORCID = "0009-0008-1357-9003"
+OSF = "osf.io/htswk"
+CONCEPT_DOI = "10.5281/zenodo.23599019"
+VERSION_DOI = "10.5281/zenodo.23599020"
+
+citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+check("CITATION.cff carries the ORCID", ORCID in citation)
+check("CITATION.cff carries the concept DOI", CONCEPT_DOI in citation)
+check("CITATION.cff carries the version DOI", VERSION_DOI in citation)
+check("CITATION.cff carries repository-code", "repository-code:" in citation)
+check("README carries the ORCID", ORCID in readme)
+check("README carries the OSF link", OSF in readme)
+
+# No file may cite an ORCID or OSF GUID other than the declared ones.
+import itertools
+for path in itertools.chain((ROOT / "src").rglob("*.py"), (ROOT / "docs").rglob("*.md"), [ROOT / "README.md"]):
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    for found in set(re.findall(r"orcid\.org/([0-9X-]{19})", text)):
+        check(f"{path.name}: ORCID {found} is the declared one", found == ORCID)
+    for found in set(re.findall(r"osf\.io/([a-z0-9]+)", text)):
+        check(f"{path.name}: OSF GUID {found} is the declared one", found == "htswk")
+    for found in set(re.findall(r"10\.5281/zenodo\.(\d+)", text)):
+        check(
+            f"{path.name}: zenodo.{found} is a declared DOI",
+            found in {CONCEPT_DOI.split(".")[-1], VERSION_DOI.split(".")[-1]},
+        )
+
 print(f"\n{'=' * 70}\n{CHECKS - len(FAILURES)}/{CHECKS} continuity checks passed")
 if FAILURES:
     print(f"{len(FAILURES)} FAILED:")
