@@ -10,7 +10,7 @@ Grounded in:
 - Schatzki, Larocca, Nguyen, Sauvage & Cerezo, npj Quantum Inf. 2024 (doi:10.1038/s41534-024-00804-1)
 - Cerezo et al., Nat. Commun. 2025 (doi:10.1038/s41467-025-63099-6)
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599020).
+Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass

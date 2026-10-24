@@ -2,7 +2,7 @@
 Stage 1 - Step 06: 3D Cerebral Penetrating Arteriole Geometry, Porous Thrombus Plug,
 and Post-Occlusive Acidotic Microenvironment Model.
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599020).
+Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass

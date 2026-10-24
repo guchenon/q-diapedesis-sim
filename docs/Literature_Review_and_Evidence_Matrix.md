@@ -1,6 +1,6 @@
 # Verified Systematic Literature Review, SOTA Novelty Audit & Epistemic Transparency Matrix — Q-DIAPEDESIS
 **Project:** Physiology-Guided Quantum Floquet Control of Biomimetic Microrobotic Swarms for Cerebral Microvascular Recanalization  
-**OSF Preregistration:** [https://osf.io/htswk](https://osf.io/htswk) | **Software DOI:** [10.5281/zenodo.23599020](https://doi.org/10.5281/zenodo.23599020)  
+**OSF project:** [https://osf.io/htswk](https://osf.io/htswk) (see Appendix C) | **Software DOI (concept, all versions):** [10.5281/zenodo.23599019](https://doi.org/10.5281/zenodo.23599019)  
 **Author:** Chanon Singson ([ORCID: 0009-0008-1357-9003](https://orcid.org/0009-0008-1357-9003))  
 **Verification Date:** 24 October 2026 (All DOIs and PMIDs resolved against live Crossref REST API, PubMed/MEDLINE, and arXiv registries)
 
@@ -136,3 +136,24 @@ residual ~20 % belongs to the batch MAP form, which uses the whole window includ
 later than the instant it estimates — it is a **smoother, not a causal filter**. For real-time
 use inside the blind window the harmonic-aware Kalman filter is the fair comparator, and it also
 clears the preregistered < 8.0 µm ceiling at every window.
+
+---
+
+## Appendix C — Identifier Status and What Each One Supports (2026-10-24)
+
+Audited through public APIs only; full detail in ELN #005. Recorded here because a reader of
+this document should be able to see exactly what each identifier does and does not establish.
+
+| Identifier | Verified status | What it supports |
+| :--- | :--- | :--- |
+| ORCID [0009-0008-1357-9003](https://orcid.org/0009-0008-1357-9003) | Resolves to Chanon Singson. **0 public works listed.** | Author identity only; it does not yet link to this software or protocol. |
+| **Concept DOI [10.5281/zenodo.23599019](https://doi.org/10.5281/zenodo.23599019)** | Resolves; all-versions record | **The DOI to cite for this software.** Always resolves to the newest archived version. Source-file headers cite this one. |
+| Version DOI [10.5281/zenodo.23599020](https://doi.org/10.5281/zenodo.23599020) | Resolves, open access, version `v0.1.0-alpha` | The **preregistration snapshot** only: `configs/` and `tests/test_config_sanity.py`. It contains **no simulation code**, so it supports the parameter lock and nothing about the implementation. |
+| [osf.io/htswk](https://osf.io/htswk) | `api.osf.io/v2/nodes/htswk` → **401** (exists, private); `api.osf.io/v2/registrations/htswk` → **404** | A **project node**. The 404 on the registrations endpoint means this GUID is **not an OSF registration**, so it does **not** currently support a claim of public preregistration. |
+| GitHub `guchenon/q-diapedesis-sim` | `api.github.com` → **403** | The repository is not publicly readable, so the results are not independently reproducible from it at present. |
+
+**Consequence for how this work should be described.** Until the OSF status is resolved from
+inside the account, the protocol should be described as a **protocol document on OSF** rather
+than a preregistration, and the parameter lock should be attributed to the timestamped Zenodo
+snapshot and the `v0.1.0-alpha` git tag (`b5899d7`), which *are* verifiable. The git tag is
+checked on every run of `experiments/check_continuity.py`.

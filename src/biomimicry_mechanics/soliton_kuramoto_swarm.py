@@ -8,7 +8,7 @@ Grounded in:
 - O'Keeffe, Hong & Strogatz, Nat. Commun. 2017 (doi:10.1038/s41467-017-01190-3)
 - Ceron, Gardi, Petersen & Sitti, PNAS 2023 (doi:10.1073/pnas.2221913120)
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599020).
+Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass

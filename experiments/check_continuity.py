@@ -163,12 +163,21 @@ for path in itertools.chain((ROOT / "src").rglob("*.py"), (ROOT / "docs").rglob(
     text = path.read_text(encoding="utf-8", errors="ignore")
     for found in set(re.findall(r"orcid\.org/([0-9X-]{19})", text)):
         check(f"{path.name}: ORCID {found} is the declared one", found == ORCID)
-    for found in set(re.findall(r"osf\.io/([a-z0-9]+)", text)):
+    # Only the public GUID form osf.io/<guid>; api.osf.io/v2/... paths are API calls, not GUIDs.
+    for found in set(re.findall(r"(?<!api\.)osf\.io/([a-z0-9]{5,})", text)):
         check(f"{path.name}: OSF GUID {found} is the declared one", found == "htswk")
     for found in set(re.findall(r"10\.5281/zenodo\.(\d+)", text)):
         check(
             f"{path.name}: zenodo.{found} is a declared DOI",
             found in {CONCEPT_DOI.split(".")[-1], VERSION_DOI.split(".")[-1]},
+        )
+    # Source headers must cite the CONCEPT DOI. The version DOI is pinned to v0.1.0-alpha,
+    # whose archive holds configs and one test file only, so a module header citing it sends a
+    # reader to an archive that does not contain that module (ELN #005, finding 2).
+    if path.suffix == ".py":
+        check(
+            f"{path.name}: header cites the concept DOI, not the version-pinned one",
+            VERSION_DOI not in text,
         )
 
 print(f"\n{'=' * 70}\n{CHECKS - len(FAILURES)}/{CHECKS} continuity checks passed")

@@ -8,7 +8,7 @@ Grounded in:
 - Higashikawa, Fujita & Sato, arXiv:1810.01103 (Classical Floquet-Magnus expansion)
 - Ceron, Gardi, Petersen & Sitti, PNAS 2023 (doi:10.1073/pnas.2221913120)
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599020).
+Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass

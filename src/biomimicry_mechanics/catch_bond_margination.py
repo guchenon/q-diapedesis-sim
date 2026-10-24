@@ -8,7 +8,7 @@ Grounded in:
 - Alapan, Bozuyuk, Erkoc, Karacakol & Sitti, Sci. Robot. 2020 (doi:10.1126/scirobotics.aba5726)
 - Muller et al., Sci. Rep. 2014 (doi:10.1038/srep04871)
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599020).
+Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass
