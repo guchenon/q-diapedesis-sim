@@ -19,7 +19,13 @@ bimodal_floquet_drive:
   target_dual_task_fidelity_min: 0.92
 
 lindblad_and_tensor_network:
-  viscous_dissipation_gamma: 0.15
+  # D8 (ELN #003): viscous_dissipation_gamma was the free number 0.15 (present in the
+  # v0.1.0-alpha snapshot, not declared locked in ELN #001, not asserted by the preregistered
+  # sanity test). It is now DERIVED: in the overdamped regime of a 0.75 um rotor in plasma the
+  # same quantity m B / zeta_r sets both the coherent precession scale and the dissipative
+  # relaxation scale, so the two cannot be chosen independently.
+  derive_dissipation_from_physics: true
+  viscous_dissipation_gamma: 0.15      # legacy free value; used only if the switch above is false
   dipole_interaction_strength_J0: 1.25
   ttn_max_bond_dimension_chi: 16
   permutation_equivariant_symmetry: true
@@ -28,3 +34,33 @@ mri_sub_voxel_observer:
   mri_blind_window_ms: 100.0
   pino_update_interval_ms: 2.0
   tomography_measurement_shots: 512
+
+# ----------------------------------------------------------------------------
+# Model implementation constants (not preregistered hypothesis thresholds).
+# Added 2026-10-24 under decisions D2-b/D3/D5; rationale logged in ELN #003.
+# ----------------------------------------------------------------------------
+implementation_constants:
+  barren_plateau:
+    # D9 (ELN #003): the verdict is now the measured POLYNOMIAL DECAY EXPONENT plus the margin
+    # over the unstructured global-cost baseline, which is what Barthel & Miao 2025 and
+    # Schatzki et al. 2024 actually bound and what OSF Hypothesis 4 registers
+    # ("without barren-plateau gradient vanishing"). A fixed floor tests the wrong property:
+    # any polynomially decaying quantity falls below any constant once N is large enough.
+    max_polynomial_decay_exponent: 8.0   # a priori: an exponential 2^-1.94n would show an
+                                         # apparent log-log slope in the hundreds over N=8..128
+    max_log_log_fit_residual_log2: 1.5   # a priori: the power law must actually fit
+    min_improvement_orders: 10.0         # unchanged from the original assertion
+    gradient_variance_floor: 1.0e-3      # retained only to document what the criterion replaced
+    measurement_samples: 256
+  step_out:
+    # Mahoney-Abbott step-out frequencies, previously hard-coded in floquet_hamiltonian.py (D5).
+    # Values unchanged; they are design parameters of the particle, not measured here.
+    alpha_stepout_frequency_Hz: 95.0
+    beta_stepout_frequency_Hz: 12.0
+    amplitude_scaling_clip: [0.85, 1.25]
+  dual_task_score_weights:
+    # Weights of the preregistered `dual_task_fidelity` score. Moved to config unchanged (D5).
+    # See ELN #003 finding 6e: this score has no term penalizing an inadequate field and is
+    # monotonically non-increasing in field amplitude, so it rewards turning the actuator off.
+    alpha_sync_weight: 0.52
+    beta_mesh_weight: 0.48

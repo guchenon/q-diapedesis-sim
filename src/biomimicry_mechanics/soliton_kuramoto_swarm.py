@@ -8,13 +8,15 @@ Grounded in:
 - O'Keeffe, Hong & Strogatz, Nat. Commun. 2017 (doi:10.1038/s41467-017-01190-3)
 - Ceron, Gardi, Petersen & Sitti, PNAS 2023 (doi:10.1073/pnas.2221913120)
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599020).
+Part of the Q-DIAPEDESIS Framework (OSF registration: https://osf.io/8mysz | project: https://osf.io/hnstf | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
 import yaml
+
+from src.physics import derive_swarm_coupling_K
 
 
 @dataclass
@@ -52,6 +54,7 @@ class HydroMagneticSolitonSwarm:
         vessel_config_path: Path | str | None = None,
         floquet_config_path: Path | str | None = None,
         seed: int | None = None,
+        lumen_diameter_um: float | None = None,
     ):
         root_dir = Path(__file__).resolve().parent.parent.parent
         if vessel_config_path is None:
@@ -68,15 +71,38 @@ class HydroMagneticSolitonSwarm:
         self.rng = np.random.default_rng(meta_seed if seed is None else int(seed))
 
         geom = self.vessel_cfg["vessel_geometry"]
+        diameter_um = (
+            float(geom["default_diameter_um"]) if lumen_diameter_um is None else float(lumen_diameter_um)
+        )
         self.vessel_length_um = float(geom["vessel_length_um"])
-        self.lumen_radius_um = 0.5 * float(geom["default_diameter_um"])
+        # M1 (ELN #003): the closed loop can run at 15, 30 or 50 um, but this was always built
+        # from the config default, so an overridden episode placed the swarm in the wrong lumen.
+        self.lumen_diameter_um = diameter_um
+        self.lumen_radius_um = 0.5 * diameter_um
 
         thrombus = self.vessel_cfg["thrombus_and_microenvironment"]
         self.thrombus_z_um = float(thrombus["thrombus_axial_position_um"])
         self.thrombus_len_um = float(thrombus["thrombus_length_um"])
 
         soliton = self.vessel_cfg["biomimicry_layer"]["hydro_magnetic_soliton"]
-        self.coupling_K = float(soliton["kuramoto_coupling_K"])
+        # D7 (ELN #003): the coupling is derived from the magnetic dipole-dipole torque and the
+        # rotational drag of the configured particle, in the geometry this model actually seeds.
+        # The SIGN is physical and is kept: a negative K means the dipolar torques anti-align
+        # the phases, which is what an axially extended near-wall band produces.
+        self.coupling_is_derived = bool(soliton.get("derive_coupling_from_physics", False))
+        if self.coupling_is_derived:
+            detail = derive_swarm_coupling_K(
+                self.vessel_cfg, self.floquet_cfg, diameter_um, return_detail=True
+            )
+            self.derived_coupling_K_rad_s = float(detail["coupling_K_rad_s"])
+            self.derived_moment_A_m2 = float(detail["moment_A_m2"])
+            self.placeable_dose_fraction = float(detail["placeable_fraction"])
+            self.coupling_K = self.derived_coupling_K_rad_s
+        else:
+            self.derived_coupling_K_rad_s = float("nan")
+            self.derived_moment_A_m2 = float("nan")
+            self.placeable_dose_fraction = float("nan")
+            self.coupling_K = float(soliton["kuramoto_coupling_K"])
         self.phase_lag_alpha = float(soliton["phase_lag_alpha_rad"])
         self.washout_ceiling_pct = float(soliton["washout_loss_ceiling_percent"])
 
@@ -88,6 +114,21 @@ class HydroMagneticSolitonSwarm:
         drive = self.floquet_cfg["bimodal_floquet_drive"]
         self.omega_alpha_rad_s = 2.0 * np.pi * float(drive["alpha_drill_frequency_Hz"])
         self.omega_beta_rad_s = 2.0 * np.pi * float(drive["beta_trap_frequency_Hz"])
+
+        # D3 Stage 2: frequency dispersion and rotational noise (implementation constants)
+        disp = self.vessel_cfg["implementation_constants"]["kuramoto_dispersion"]
+        self.natural_frequency_cv = float(disp["natural_frequency_cv"])
+        self.temperature_K = float(disp["temperature_K"])
+        self.particle_radius_um = float(soliton_layer_radius := self.vessel_cfg["biomimicry_layer"]["particle_radius_um"])
+        plasma_mu_Pa_s = 1.0e-3 * float(
+            self.vessel_cfg["hemodynamics_pries_secomb"]["plasma_viscosity_mPa_s"]
+        )
+        # Stokes-Einstein-Debye rotational diffusion of a sphere: D_r = kT / (8 pi eta a^3)
+        BOLTZMANN_J_PER_K = 1.380649e-23
+        radius_m = 1.0e-6 * float(soliton_layer_radius)
+        self.rotational_diffusion_rad2_s = (BOLTZMANN_J_PER_K * self.temperature_K) / (
+            8.0 * np.pi * plasma_mu_Pa_s * radius_m**3
+        )
 
         self.reset()
 
@@ -109,8 +150,20 @@ class HydroMagneticSolitonSwarm:
         # Initialize radial positions near vessel wall (post-margination band)
         self.r_um = self.rng.uniform(0.75 * self.lumen_radius_um, 0.94 * self.lumen_radius_um, size=self.n_super)
 
-        # Initialize oscillator phases with moderate initial spread
-        self.phases_rad = self.rng.uniform(-0.6, 0.6, size=self.n_super)
+        # D3 Stage 2: start incoherent over the whole circle. A narrow initial window made
+        # the order parameter start near 0.95, so "synchronization" was the initial condition.
+        self.phases_rad = self.rng.uniform(-np.pi, np.pi, size=self.n_super)
+
+        # D3 Stage 2: per-rotor natural frequencies, dispersed about each sub-swarm's drive
+        # frequency. Without this the oscillators are identical and cannot desynchronize.
+        self.natural_omegas_rad_s = np.empty(self.n_super, dtype=float)
+        for group_id, omega_0 in ((0, self.omega_alpha_rad_s), (1, self.omega_beta_rad_s)):
+            mask = self.labels == group_id
+            self.natural_omegas_rad_s[mask] = self.rng.normal(
+                loc=omega_0,
+                scale=self.natural_frequency_cv * abs(omega_0),
+                size=int(np.count_nonzero(mask)),
+            )
         return self.get_state(collateral_skimming_fraction=0.05, wall_locked=True)
 
     @staticmethod
@@ -136,21 +189,27 @@ class HydroMagneticSolitonSwarm:
         """
         K_eff = self.coupling_K if enable_soliton_coupling else 0.0
 
-        # Sakaguchi-Kuramoto phase update within each frequency-decoupled sub-swarm
+        # Sakaguchi-Kuramoto phase update within each frequency-decoupled sub-swarm.
+        # Written in the rotating frame of each sub-swarm's drive frequency, so the detuning
+        # of rotor i is its natural frequency minus that drive frequency (D3 Stage 2).
+        dt = float(dt_s)
+        noise_scale = np.sqrt(2.0 * self.rotational_diffusion_rad2_s * dt)
         for group_id, omega_0 in ((0, self.omega_alpha_rad_s), (1, self.omega_beta_rad_s)):
             mask = self.labels == group_id
             theta_g = self.phases_rad[mask]
             n_g = theta_g.size
-            if n_g > 1 and K_eff > 0.0:
+            if n_g > 1 and K_eff != 0.0:
                 # Pairwise phase differences: theta_j - theta_i - alpha
                 diff_matrix = theta_g[np.newaxis, :] - theta_g[:, np.newaxis] - self.phase_lag_alpha
                 coupling_term = (K_eff / float(n_g)) * np.sum(np.sin(diff_matrix), axis=1)
             else:
                 coupling_term = np.zeros_like(theta_g)
 
-            # Rotate in the frame of the driving frequency so phase dispersion decays
-            dtheta_dt = coupling_term
-            self.phases_rad[mask] = (theta_g + dtheta_dt * float(dt_s)) % (2.0 * np.pi)
+            detuning = self.natural_omegas_rad_s[mask] - omega_0
+            rotational_noise = noise_scale * self.rng.standard_normal(n_g)
+            self.phases_rad[mask] = (
+                theta_g + (detuning + coupling_term) * dt + rotational_noise
+            ) % (2.0 * np.pi)
 
         # Step 14: Axial dynamics for alpha (drilling toward thrombus center) and beta (stabilizing mesh)
         alpha_mask = self.labels == 0

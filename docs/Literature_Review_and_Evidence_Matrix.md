@@ -1,6 +1,6 @@
 # Verified Systematic Literature Review, SOTA Novelty Audit & Epistemic Transparency Matrix — Q-DIAPEDESIS
 **Project:** Physiology-Guided Quantum Floquet Control of Biomimetic Microrobotic Swarms for Cerebral Microvascular Recanalization  
-**OSF Preregistration:** [https://osf.io/htswk](https://osf.io/htswk) | **Software DOI:** [10.5281/zenodo.23599020](https://doi.org/10.5281/zenodo.23599020)  
+**OSF registration:** [https://osf.io/8mysz](https://osf.io/8mysz) | **project:** [https://osf.io/hnstf](https://osf.io/hnstf) (see Appendix C) | **Software DOI (concept, all versions):** [10.5281/zenodo.23599019](https://doi.org/10.5281/zenodo.23599019)  
 **Author:** Chanon Singson ([ORCID: 0009-0008-1357-9003](https://orcid.org/0009-0008-1357-9003))  
 **Verification Date:** 24 October 2026 (All DOIs and PMIDs resolved against live Crossref REST API, PubMed/MEDLINE, and arXiv registries)
 
@@ -69,3 +69,96 @@ A rigorous audit of the literature up to October 2026 confirms that **no prior p
 | **8** | PINO sub-voxel tracking error $< 8.0\ \mu\text{m}$ in $50–200\text{ ms}$ window | **Status A** (MRN & PINO) / **Status B** ($<8\ \mu\text{m}$ error) | MRI $24\text{ Hz}$ duty cycle (`10.3109/10929080802551274`); $80\text{ ms}$ frame / $0.4\text{ s}$ latency (`10.1038/s41467-023-43966-w`); PINO (`10.1145/3648506`). | 95th-percentile Euclidean centroid tracking error during $100\text{ ms}$ MRI actuation blind windows vs. dead-reckoning and Kalman baselines. |
 | **9** | Brain temperature elevation $\Delta T < 0.30\ ^\circ\text{C}$ | **Status A** (stroke fever harm) / **Status B** ($0.3^\circ\text{C}$ margin) | Ischemic penumbra consumption $>37.5^\circ\text{C}$ (`10.1093/braincomms/fcaa116`); AMF limit $H\cdot f < 4.85\times 10^8\text{ A m}^{-1}\text{s}^{-1}$ (`10.1016/j.jmmm.2006.10.1156`). | Conservative engineering thermal safety margin $\Delta T < 0.30\ ^\circ\text{C}$ above baseline Pennes perfusion equilibrium. |
 | **10** | Post-task degaussing + retrograde retrieval $\ge 99.0\%$ | **Status A** (SOTA $76–92\%$ at $\ge 0.9\text{ mm}$) / **Status B** ($\ge 99\%$ target) | SOTA catheter retrieval $76.4–91.9\%$ at $<5\text{ cm/s}$ (`10.1126/sciadv.adk8970`; `10.1002/advs.202415305`); upstream rolling (`10.1126/scirobotics.aba5726`). | Final mass-balance fraction of deployed agents recovered at the parent catheter mouth after exponential degaussing and retrograde wall rolling. |
+
+---
+
+## Appendix A — DOI Resolution Audit (L2, 2026-10-24)
+
+Every DOI appearing in `docs/`, `src/` and `README.md` was resolved against the DOI
+content-negotiation API (`application/vnd.citationstyles.csl+json`) and the returned title was
+compared against the claim it supports in this document.
+
+**Result: 87 / 87 unique DOIs resolve, and the returned titles match the claims.** The audit
+script is `experiments/check_dois.py`.
+
+Titles confirmed for the load-bearing citations:
+
+| DOI | Resolved title | Claim it supports |
+| :--- | :--- | :--- |
+| `10.1002/ana.78142` | Revisiting Incomplete Tissue-Level Reperfusion Following Successful Thrombectomy for Acute Ischemic Stroke | No-reflow after successful recanalization |
+| `10.1161/STROKEAHA.124.049574` | Persistent Tissue-Level Hypoperfusion (No-Reflow) Negates the Clinical Benefit of Successful Thrombectomy | Futile recanalization, EXTEND-IA pooled |
+| `10.1038/s41467-024-51211-1` | Piezo1 expression in neutrophils regulates shear-induced NETosis | Shear dose-response for NETosis (D3 Stage 1) |
+| `10.1007/s00220-024-05217-x` | Absence of Barren Plateaus and Scaling of Gradients in the Energy Optimization of Isometric Tensor Network States | Barren-plateau freedom (D2-b) |
+| `10.1038/s41534-024-00804-1` | Theoretical guarantees for permutation-equivariant quantum neural networks | Equivariant ansatz gradient scaling |
+| `10.1063/1.4870768` | Behavior of rotating magnetic microrobots above the step-out frequency… | Mahoney step-out law |
+| `10.1177/0271678X20914179` | Dynamic capillary stalls in reperfused ischemic penumbra contribute to injury… | Capillary stalling, neutrophil role |
+| `10.1016/0026-2862(89)90018-6` | Red cell distribution at microvascular bifurcations | Plasma skimming at bifurcations |
+| `10.1016/S0140-6736(22)01882-7` | Intensive blood pressure control after endovascular thrombectomy (ENCHANTED2/MT) | CPP/BP management after MT |
+
+**Correction to an earlier spot-check.** An interim note in ELN #003 reported
+`10.1002/ana.78142` (Qiao et al. 2026) as "not found". That was wrong — it resolves, and its
+title matches the claim. The earlier check was manual and is superseded by this audit.
+
+**What this audit does and does not establish.** It confirms that each DOI exists and points at
+a paper whose title matches the claim made here. It does **not** verify that the specific
+numbers quoted in this document (percentages, odds ratios, cohort sizes) appear in those
+papers; that requires reading each one. Three figures the simulation depends on quantitatively
+were checked against their sources by hand and are recorded in ELN #002/#003: the Rovainen 1993
+arteriolar wall shear (39 ± 14 dyn/cm²), the Pries 1994 in-vivo viscosity law, and the Baratchi
+2024 top shear dose (80 dyn/cm²). The remaining quoted figures have not been checked at that
+level.
+
+
+---
+
+## Appendix B — Method-to-Citation Correspondence (D11, 2026-10-24)
+
+A citation must describe the method the code runs. Two entries in this matrix did not, and both
+are corrected here rather than left to be read the generous way.
+
+| Module | Cited as | What the code actually implements | Status |
+| :--- | :--- | :--- | :--- |
+| B2 observer | Physics-Informed Neural Operator (Li, Kovachki, Anandkumar et al., ICLR 2021, arXiv:2010.08895) | Five-mode regularized Fourier (spectral) MAP estimator with a cardiac-harmonic prior. No neural network; no learned operator; no training of any kind. | **Citation does not describe the method.** Keep the Fourier/spectral-prior framing, drop the neural-operator claim, or implement one. |
+| B4 Lindblad | GKLS master equation (Lindblad 1976; Gorini, Kossakowski & Sudarshan 1976) | A genuine RK4 integration of the GKLS generator — correct since D3 — but on a **two-level reduced-order surrogate** not derived from the N-body dipolar Hamiltonian. | Citation correct for the equation; the **reduction** is Status B and must be labelled as such in the manuscript. |
+| B7 thermal | Pennes bioheat equation | A specific heating rate in degC/s minus a perfusion term. No tissue density, specific heat, conductivity or SAR conversion appears anywhere. | **Not a Pennes solution.** Label as a lumped thermal surrogate (Status B). |
+
+**Where the B2 accuracy comes from, decomposed (D11).** p95 tracking error, mean of 12 seeds:
+
+| Blind window | Spectral MAP | Harmonic-aware Kalman | Plain Kalman | Dead reckoning | Last hold |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 50 ms | 0.968 µm | 1.175 µm | 1.674 µm | 1.770 µm | 5.970 µm |
+| 100 ms | 1.189 µm | 1.483 µm | 2.531 µm | 2.981 µm | 11.468 µm |
+| 200 ms | 2.520 µm | 2.978 µm | 5.082 µm | 5.122 µm | 22.112 µm |
+
+Roughly **three quarters of the margin over a plain Kalman filter is the physics prior**, not the
+estimator: a Kalman filter given the same cardiac-harmonic model recovers most of it. The
+residual ~20 % belongs to the batch MAP form, which uses the whole window including samples
+later than the instant it estimates — it is a **smoother, not a causal filter**. For real-time
+use inside the blind window the harmonic-aware Kalman filter is the fair comparator, and it also
+clears the preregistered < 8.0 µm ceiling at every window.
+
+---
+
+## Appendix C — Identifier Status and What Each One Supports (2026-10-24)
+
+Audited through public APIs only; full detail in ELN #005. Recorded here because a reader of
+this document should be able to see exactly what each identifier does and does not establish.
+
+| Identifier | Verified status | What it supports |
+| :--- | :--- | :--- |
+| ORCID [0009-0008-1357-9003](https://orcid.org/0009-0008-1357-9003) | Resolves to Chanon Singson. **Still 0 public works** on the public API as of 2026-10-24, after the Zenodo link was reported as done — so whatever was linked is not set to public visibility. | Author identity only; it does not yet link to this software or protocol **in a way a reader can see**. |
+| **Concept DOI [10.5281/zenodo.23599019](https://doi.org/10.5281/zenodo.23599019)** | Resolves; all-versions record | **The DOI to cite for this software.** Always resolves to the newest archived version. Source-file headers cite this one. |
+| Version DOI [10.5281/zenodo.23599020](https://doi.org/10.5281/zenodo.23599020) | Resolves, open access, version `v0.1.0-alpha` | The **preregistration snapshot** only: `configs/` and `tests/test_config_sanity.py`. It contains **no simulation code**, so it supports the parameter lock and nothing about the implementation. |
+| **[osf.io/8mysz](https://osf.io/8mysz)** | `registrations/8mysz` → **401** (exists, private); `nodes/8mysz` → **404** | **This is the registration.** The response pattern is the exact inverse of a project node, which is what identifies it. It is **private or embargoed**, so a reader cannot yet open it; it supports the existence of a registration but not public verifiability. |
+| [osf.io/hnstf](https://osf.io/hnstf) | `nodes/hnstf` → **401**; `registrations/hnstf` → **404** | The **associated project node**, private. |
+| [osf.io/htswk](https://osf.io/htswk) | `nodes/htswk` → **401**; `registrations/htswk` → **404** | Another **project node**, private. This is the GUID the repository cited as its preregistration until 2026-10-24; it is a project, not a registration, which is what the audit caught. |
+| GitHub `guchenon/q-diapedesis-sim` | `api.github.com` → **403** | The repository is not publicly readable, so the results are not independently reproducible from it at present. |
+
+**Consequence for how this work should be described (updated 2026-10-24).** A registration does
+exist — `osf.io/8mysz` — so the word *registered* is accurate and the repository now points there.
+But it answers `401`, so it is **private or embargoed and a reader cannot verify it**. Until it is
+made public, any claim of *preregistration* should be stated together with that limitation, and the
+independently checkable parameter lock remains the timestamped Zenodo snapshot and the
+`v0.1.0-alpha` git tag (`b5899d7`), which `experiments/check_continuity.py` re-checks on every run.
+Making the registration public is the one step that turns the project's central claim from
+asserted into verifiable.

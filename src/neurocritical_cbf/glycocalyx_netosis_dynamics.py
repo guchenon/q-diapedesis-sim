@@ -3,13 +3,15 @@ Stage 1 - Steps 08 & 09: Endothelial Glycocalyx Integrity Dynamics,
 Mechanosensitive Neutrophil NETosis Risk (Piezo1 Shear Activation),
 Pulsed Micro-Dialysis Acidotic pH Buffering, and Pennes Bioheat Model.
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599020).
+Part of the Q-DIAPEDESIS Framework (OSF registration: https://osf.io/8mysz | project: https://osf.io/hnstf | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
 import yaml
+
+from .shear_dose_response import hill_fraction, load_dose_response_constants
 
 
 @dataclass
@@ -68,9 +70,20 @@ class GlycocalyxNetosisDynamics:
         self.pH_initial = float(thrombus["post_occlusive_pH_initial"])
         self.pH_target = float(thrombus["physiological_pH_target"])
 
-        # Kinetic rate constants grounded in microvascular pathophysiology
-        self.k_shedding_inv_Pa_s = 0.045
-        self.k_netosis_inv_s = 0.12
+        # Continuous shear dose-response constants (D3, ELN #003; implementation_constants)
+        dose = load_dose_response_constants(cbf_config_path)
+        self.hill_tau50_Pa = float(dose["hill_tau50_Pa"])
+        self.hill_n = float(dose["hill_n"])
+        self.k_glyco_mech_max_inv_s = float(dose["glyco_k_mech_max_inv_s"])
+        self.k_glyco_osc_inv_s = float(dose["glyco_k_oscillatory_inv_s"])
+        self.k_netosis_max_inv_s = float(dose["netosis_k_max_inv_s"])
+        self.k_netosis_clearance_inv_s = float(dose["netosis_clearance_inv_s"])
+
+        # D5 (ELN #003): bioheat constants moved out of the source, values unchanged.
+        bioheat = self.cbf_cfg["implementation_constants"]["bioheat"]
+        self.heating_rate_degC_per_s_per_Hz_mT2 = float(bioheat["heating_rate_degC_per_s_per_Hz_mT2"])
+        self.perfusion_cooling_base_inv_s = float(bioheat["perfusion_cooling_base_inv_s"])
+        self.perfusion_velocity_scale_um_s = float(bioheat["perfusion_velocity_scale_um_s"])
 
         self.reset()
 
@@ -99,21 +112,17 @@ class GlycocalyxNetosisDynamics:
         peak_shear_Pa = float(np.max(wall_shear_profile_Pa))
         mean_shear_Pa = float(np.mean(wall_shear_profile_Pa))
 
-        # 1. Step 08: Endothelial Glycocalyx Shedding Dynamics
-        # Excess shear above tau_crit (5.50 Pa) causes rapid syndecan-1 / heparan sulfate shedding;
-        # sub-threshold shear incurs only minimal baseline mechanical wear.
-        excess_shear = max(0.0, peak_shear_Pa - self.tau_crit_Pa)
-        sub_threshold_wear = 0.0015 * (mean_shear_Pa / self.tau_crit_Pa) ** 2
-        d_glyco_dt = -(self.k_shedding_inv_Pa_s * (excess_shear ** 1.5) + sub_threshold_wear) * self.glyco_ratio
+        # 1. Step 08: Endothelial glycocalyx shedding (continuous Hill dose-response, D3)
+        h_peak = float(hill_fraction(peak_shear_Pa, self.hill_tau50_Pa, self.hill_n))
+        sub_threshold_wear = self.k_glyco_osc_inv_s * (mean_shear_Pa / self.hill_tau50_Pa) ** 2
+        d_glyco_dt = -(self.k_glyco_mech_max_inv_s * h_peak + sub_threshold_wear) * self.glyco_ratio
         self.glyco_ratio = float(np.clip(self.glyco_ratio + d_glyco_dt * dt_s, 0.0, 1.0))
 
-        # 2. Step 09 (Module B3a): Mechanosensitive Piezo1 Neutrophil NETosis Activation
-        if peak_shear_Pa > self.tau_crit_Pa:
-            shear_over_ratio = (peak_shear_Pa - self.tau_crit_Pa) / self.tau_crit_Pa
-            d_net_dt = self.k_netosis_inv_s * (shear_over_ratio ** 2) * (1.0 - self.netosis_index)
-        else:
-            # Slow physiological clearance of sub-threshold activation signals
-            d_net_dt = -0.01 * self.netosis_index
+        # 2. Step 09 (Module B3a): Piezo1 NETosis, continuous in shear (Baratchi et al. 2024), with clearance
+        d_net_dt = (
+            self.k_netosis_max_inv_s * h_peak * (1.0 - self.netosis_index)
+            - self.k_netosis_clearance_inv_s * self.netosis_index
+        )
         self.netosis_index = float(np.clip(self.netosis_index + d_net_dt * dt_s, 0.0, 1.0))
 
         # 3. Step 09 (Module B3b): Pulsed Micro-Dialysis Acidotic pH Buffering
@@ -124,11 +133,19 @@ class GlycocalyxNetosisDynamics:
         d_pH_dt = (self.pH_target - self.current_pH) / tau_pH_s
         self.current_pH = float(np.clip(self.current_pH + d_pH_dt * dt_s, self.pH_initial, self.pH_target))
 
-        # 4. Step 09 (Module B7): Pennes Bioheat Equation for Magnetothermal Brain Safety
-        # Low-frequency AMF power density scales with f * B^2; blood perfusion convects heat away
-        q_mag_mW_cm3 = 1.8e-6 * drive_frequency_Hz * (b_field_amplitude_mT ** 2)
-        perfusion_cooling_inv_s = 0.08 * (1.0 + blood_perfusion_velocity_um_s / 1000.0)
-        d_temp_dt = q_mag_mW_cm3 - perfusion_cooling_inv_s * self.delta_T_C
+        # 4. Step 09 (Module B7): magnetothermal brain-safety heat balance.
+        # UNIT CORRECTION (D3/D5, ELN #003): this term was named `q_mag_mW_cm3` and commented as
+        # a power density, but it is added straight into dT/dt, so it is a specific heating RATE
+        # in degC/s and its coefficient carries degC/(s*Hz*mT^2). The value is unchanged.
+        # This is NOT a Pennes bioheat solution: no tissue density, specific heat, conductivity or
+        # SAR conversion appears anywhere in the model. Reduced-order surrogate, Status B.
+        heating_rate_degC_s = (
+            self.heating_rate_degC_per_s_per_Hz_mT2 * drive_frequency_Hz * (b_field_amplitude_mT ** 2)
+        )
+        perfusion_cooling_inv_s = self.perfusion_cooling_base_inv_s * (
+            1.0 + blood_perfusion_velocity_um_s / self.perfusion_velocity_scale_um_s
+        )
+        d_temp_dt = heating_rate_degC_s - perfusion_cooling_inv_s * self.delta_T_C
         self.delta_T_C = float(np.clip(self.delta_T_C + d_temp_dt * dt_s, 0.0, 5.0))
 
         self.current_time_s += float(dt_s)

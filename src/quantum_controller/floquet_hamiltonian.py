@@ -8,7 +8,7 @@ Grounded in:
 - Higashikawa, Fujita & Sato, arXiv:1810.01103 (Classical Floquet-Magnus expansion)
 - Ceron, Gardi, Petersen & Sitti, PNAS 2023 (doi:10.1073/pnas.2221913120)
 
-Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zenodo.23599020).
+Part of the Q-DIAPEDESIS Framework (OSF registration: https://osf.io/8mysz | project: https://osf.io/hnstf | DOI: 10.5281/zenodo.23599019).
 """
 
 from dataclasses import dataclass
@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict
 import numpy as np
 import yaml
+from scipy.linalg import expm
 
 
 @dataclass
@@ -66,9 +67,15 @@ class BimodalFloquetController:
         self.truncation_order = int(drive["floquet_truncation_order"])
         self.target_fidelity = float(drive["target_dual_task_fidelity_min"])
 
-        # Step-out frequencies engineered via magnetic moment / hydrodynamic drag ratio (Mahoney 2014)
-        self.f_stepout_alpha_Hz = 95.0
-        self.f_stepout_beta_Hz = 12.0
+        # Step-out frequencies engineered via magnetic moment / hydrodynamic drag ratio (Mahoney 2014).
+        # D5 (ELN #003): moved out of the source into implementation_constants.step_out, unchanged.
+        step_out = self.cfg["implementation_constants"]["step_out"]
+        self.f_stepout_alpha_Hz = float(step_out["alpha_stepout_frequency_Hz"])
+        self.f_stepout_beta_Hz = float(step_out["beta_stepout_frequency_Hz"])
+        self.amplitude_scaling_clip = tuple(float(v) for v in step_out["amplitude_scaling_clip"])
+        weights = self.cfg["implementation_constants"]["dual_task_score_weights"]
+        self.alpha_sync_weight = float(weights["alpha_sync_weight"])
+        self.beta_mesh_weight = float(weights["beta_mesh_weight"])
 
         # Pauli matrices used as generators of classical SO(3)/SU(2) dipole rotation
         self.sigma_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=complex)
@@ -117,10 +124,105 @@ class BimodalFloquetController:
         if self.truncation_order < 2:
             return h_0 + h_1
 
-        # Second-order frequency-mixing correction scaling as (f_beta / f_alpha)^2
-        freq_ratio_sq = (fb / max(fa, 1.0)) ** 2
-        h_2 = 0.15 * freq_ratio_sq * float(b_alpha_mT * b_beta_mT) * self.sigma_z / omega_a
+        # Second-order van Vleck / Floquet-Magnus term for a single harmonic (Bukov et al.,
+        # Adv. Phys. 2015). D10 (ELN #003) replaces the previous
+        #   h_2 = 0.15 * (f_beta/f_alpha)^2 * B_alpha B_beta sigma_z / omega_alpha
+        # whose coefficient 0.15 was not derived from the Magnus series and which had no
+        # measurable effect: orders 1 and 2 agreed to eight decimal places. The correct term is
+        #   H^(2) = ( [[H_{+1}, H_0], H_{-1}] + [[H_{-1}, H_0], H_{+1}] ) / (2 omega^2)
+        # and tests/test_d9_d10_criteria_and_falsifiability.py checks that it really does bring
+        # H_eff closer to the numerically exact i log U(T) / T than first order does.
+        def comm(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+            return x @ y - y @ x
+
+        h_2 = (
+            comm(comm(h_plus, h_0), h_minus) + comm(comm(h_minus, h_0), h_plus)
+        ) / (2.0 * omega_a**2)
         return h_0 + h_1 + h_2
+
+    def bimodal_drive_hamiltonian(
+        self,
+        time_s: float,
+        b_alpha_mT: float,
+        b_beta_mT: float,
+        f_alpha_Hz: float | None = None,
+    ) -> np.ndarray:
+        """
+        The time-dependent bimodal drive itself, written so that its Fourier components are
+        exactly the terms `compute_floquet_magnus_hamiltonian` expands (D3, ELN #003):
+
+            H(t) = (B_static/2) sigma_z + (B_beta/2) sigma_x
+                   + (B_alpha/2) [cos(omega_a t) sigma_x + sin(omega_a t) sigma_y]
+
+        so H_0 = (B_static/2) sigma_z + (B_beta/2) sigma_x and
+        H_{+-1} = (B_alpha/4)(sigma_x -+ i sigma_y). The slow beta mode is taken as static over
+        one alpha period, which is the adiabatic separation the class docstring assumes
+        (f_beta = 5 Hz vs f_alpha = 80 Hz).
+        """
+        fa = self.f_alpha_Hz if f_alpha_Hz is None else float(f_alpha_Hz)
+        omega_a = 2.0 * np.pi * max(fa, 1.0)
+        phase = omega_a * float(time_s)
+        return (
+            0.5 * self.b_static_mT * self.sigma_z
+            + 0.5 * float(b_beta_mT) * self.sigma_x
+            + 0.5 * float(b_alpha_mT) * (np.cos(phase) * self.sigma_x + np.sin(phase) * self.sigma_y)
+        )
+
+    def exact_one_period_propagator(
+        self,
+        b_alpha_mT: float,
+        b_beta_mT: float,
+        f_alpha_Hz: float | None = None,
+        n_substeps: int = 2048,
+    ) -> np.ndarray:
+        """
+        Numerically exact stroboscopic propagator U(T) for one alpha drive period, obtained by
+        a midpoint product of short-time exponentials of the true H(t) above. Convergence in
+        `n_substeps` is asserted in tests/test_floquet_propagator_fidelity.py.
+        """
+        fa = self.f_alpha_Hz if f_alpha_Hz is None else float(f_alpha_Hz)
+        period_s = 1.0 / max(fa, 1.0)
+        dt = period_s / int(n_substeps)
+        u = np.eye(2, dtype=complex)
+        for k in range(int(n_substeps)):
+            t_mid = (k + 0.5) * dt
+            h = self.bimodal_drive_hamiltonian(t_mid, b_alpha_mT, b_beta_mT, fa)
+            u = expm(-1.0j * h * dt) @ u
+        return u
+
+    def magnus_propagator_fidelity(
+        self,
+        b_alpha_mT: float,
+        b_beta_mT: float,
+        f_alpha_Hz: float | None = None,
+        f_beta_Hz: float | None = None,
+        truncation_order: int | None = None,
+    ) -> float:
+        """
+        Average gate fidelity between the exact one-period propagator and the propagator the
+        truncated Floquet-Magnus effective Hamiltonian predicts:
+
+            F = |Tr(U_magnus^dagger U_exact)|^2 / d^2,   d = 2
+
+        This is a real, computed fidelity obtained by evolving a state, and it is the quantity
+        that tells you whether the Floquet engineering in `compute_floquet_magnus_hamiltonian`
+        is accurate. It is NOT the preregistered `dual_task_fidelity`, which is a weighted
+        design score (see `evaluate_control_step`); the two measure different things and are
+        reported separately on purpose (D3, ELN #003).
+        """
+        fa = self.f_alpha_Hz if f_alpha_Hz is None else float(f_alpha_Hz)
+        order_before = self.truncation_order
+        if truncation_order is not None:
+            self.truncation_order = int(truncation_order)
+        try:
+            h_eff = self.compute_floquet_magnus_hamiltonian(b_alpha_mT, b_beta_mT, fa, f_beta_Hz)
+        finally:
+            self.truncation_order = order_before
+        period_s = 1.0 / max(fa, 1.0)
+        u_magnus = expm(-1.0j * h_eff * period_s)
+        u_exact = self.exact_one_period_propagator(b_alpha_mT, b_beta_mT, fa)
+        overlap = np.trace(u_magnus.conj().T @ u_exact)
+        return float(abs(overlap) ** 2 / 4.0)
 
     def evaluate_control_step(
         self,
@@ -141,12 +243,23 @@ class BimodalFloquetController:
         fb = self.f_beta_Hz if f_beta_override_Hz is None else float(f_beta_override_Hz)
 
         # Effective step-out scales linearly with applied B-field amplitude
-        f_so_alpha_eff = self.f_stepout_alpha_Hz * np.clip(scale, 0.85, 1.25)
-        f_so_beta_eff = self.f_stepout_beta_Hz * np.clip(scale, 0.85, 1.25)
+        # D10 (ELN #003): the step-out frequency is PROPORTIONAL to the field amplitude
+        # (Mahoney et al. 2014: omega_so = m B / zeta_r). The previous
+        # `np.clip(scale, 0.85, 1.25)` made the model blind to any field reduction below 0.85x,
+        # which is exactly the regime the CBF filter drives it into.
+        f_so_alpha_eff = self.f_stepout_alpha_Hz * scale
+        f_so_beta_eff = self.f_stepout_beta_Hz * scale
 
         # Group alpha rotation at fa (80 Hz): synchronous if fa <= f_so_alpha_eff
         omega_rot_alpha = self.stepout_rotation_rate_Hz(fa, f_so_alpha_eff)
         alpha_sync_fidelity = float(np.clip(omega_rot_alpha / max(fa, 1.0), 0.0, 1.0))
+
+        # D10: drilling also needs torque, and torque is proportional to the applied field. The
+        # fraction is capped at 1 so over-driving past the design field is not rewarded. Without
+        # this term the score had nothing penalizing an inadequate field and rose as the field
+        # was cut, which made the hypothesis unfalsifiable.
+        torque_fraction = float(np.clip(scale, 0.0, 1.0))
+        alpha_drill_efficiency = alpha_sync_fidelity * torque_fraction
 
         # Group beta response to high-frequency fa (80 Hz >> f_so_beta = 12 Hz):
         # Above step-out, parasitic rotation rate decays as ~ 0.5 * (f_so_beta / fa)^2
@@ -156,13 +269,20 @@ class BimodalFloquetController:
         # Group beta synchronous locking to the slow 5 Hz trapping mode
         omega_rot_beta = self.stepout_rotation_rate_Hz(fb, f_so_beta_eff)
         beta_lock_efficiency = float(np.clip(omega_rot_beta / max(fb, 1.0), 0.0, 1.0))
-        beta_mesh_stiffness = float(np.clip(beta_lock_efficiency * (1.0 - 1.2 * crosstalk_leakage), 0.0, 1.0))
+        beta_mesh_stiffness = float(
+            np.clip(beta_lock_efficiency * (1.0 - 1.2 * crosstalk_leakage) * torque_fraction, 0.0, 1.0)
+        )
 
         # Joint dual-task fidelity F_dual (Audit Table Row 6b: target >= 0.92)
         h_eff = self.compute_floquet_magnus_hamiltonian(b_alpha, b_beta, fa, fb)
         floquet_decoupling_bonus = 1.0 - 0.5 * ((fb / max(fa, 1.0)) ** 2)
         dual_fidelity = float(
-            np.clip(0.52 * alpha_sync_fidelity + 0.48 * beta_mesh_stiffness * floquet_decoupling_bonus, 0.0, 0.995)
+            np.clip(
+                self.alpha_sync_weight * alpha_drill_efficiency
+                + self.beta_mesh_weight * beta_mesh_stiffness * floquet_decoupling_bonus,
+                0.0,
+                0.995,
+            )
         )
 
         return BimodalFloquetState(
