@@ -135,3 +135,22 @@ D1-c (keep 5.50 Pa; fix H1; add distal bed resistance calibrated to physiologica
 * Re-derive `kuramoto_coupling_K` from the magnetic dipole–dipole interaction at the modeled inter-particle spacing, so that it is a physical quantity rather than a free parameter. If the derived value exceeds ~18 rad/s the thresholds may hold; if it does not, the Stage 2 hypothesis is falsified as stated. **This is the only option that resolves the question rather than restating it.**
 * Keep `K = 4.50` and record Stage 2 as a falsified hypothesis.
 * Changing 0.85, 0.90 or 2.0 % to match the new numbers would be fitting the threshold to the result and is **not** recommended; if chosen it must be filed on OSF as a deviation.
+
+| 6c | C3 (D3-b), Stage 3 GKLS | `lindblad_ttn.py`: the step is now a plain RK4 integration of `dρ/dt = −i[H,ρ] + γ(LρL† − ½{L†L,ρ})` and nothing else. Removed (i) the per-step blend `ρ ← (1−a)ρ + a·ρ_attractor` with `a` floored at 0.01, which produced the attractor overlap directly, and (ii) the factor `0.05` multiplying the Hamiltonian commutator, which scaled `H_eff` almost out of the dynamics. Also removed the `clip` on purity and overlap so integration error cannot be hidden. Docstring now states the two-level collective description is a reduced-order surrogate, **Status B**, not derived from the N-body dipolar Hamiltonian. Test `tests/test_lindblad_gkls_integration.py` written first (2 failed before) | Attractor overlap after 25 steps: **0.85+**, produced by the blend. Purity and overlap clipped to their physical ranges. Trace restored by renormalizing each step | Overlap after 25 steps (1.25 s): **0.550**; at steady state (100 s): **0.622**. Trace conserved to < 1e-9 and Hermiticity to < 1e-12 **without any projection**; eigenvalues ≥ −1e-9; purity conserved to < 1e-6 under γ = 0 (unitary limit); convergence verified fourth-order in dt. Suite 52 passed, 4 xfailed | `D3 Stage 3 GKLS:` |
+
+**Findings from step 6c — a FOURTH preregistered threshold fails. Reported, not tuned:**
+* **`dissipative_attractor_overlap > 0.80` fails** (0.550 at the tested 25 steps, 0.622 at steady state). The previous pass came entirely from the blend term, which moved the state onto `|+⟩⟨+|` by at least 1 % per step regardless of the physics — including when the dissipation rate was exactly zero, because the blend coefficient was floored at 0.01.
+* **Root cause, quantified:** the preregistered dissipation is far too weak relative to the preregistered drive. `γ_eff = 0.19 /s` against `‖H_eff‖ = 11.4 rad/s` — a ratio of 0.017, so coherent Floquet precession dominates the dissipator by about 60×, and the system never settles near the dissipative fixed point.
+
+| `viscous_dissipation_gamma` | γ_eff / ‖H_eff‖ | overlap at 1.25 s | overlap at steady state |
+| :--- | :--- | :--- | :--- |
+| **0.15 (preregistered)** | 0.017 | **0.550** | **0.622** |
+| 1.0 | 0.111 | 0.597 | 0.623 |
+| 3.0 | 0.334 | 0.628 | 0.631 |
+| 9.0 | 1.002 | 0.741 | 0.690 |
+| 15.0 | 1.670 | 0.809 | 0.766 |
+| 30.0 | 3.340 | 0.905 | 0.890 |
+
+* Reaching the preregistered 0.80 **at steady state** requires `viscous_dissipation_gamma ≈ 30`, a **200×** increase over the preregistered 0.15. The 25-step value crosses 0.80 at about 15 (100×), but that is a transient, not the attractor.
+* The same structural question arises as in step 6b and it is the same shape of question: a preregistered coupling constant was set at a value that does not scale with the drive it is supposed to compete with. **Decision needed from the preregistration owner.** `viscous_dissipation_gamma` should be derived from the rotational drag of the modeled particle in the modeled viscosity rather than chosen — note that the Stokes–Einstein–Debye drag already derived for step 6b gives a rotational relaxation rate of the right order of magnitude to settle this, so this is answerable from first principles rather than by fitting.
+* `step17` was already `xfail(strict=True)` for the C2 gradient-variance failure; its reason now records both failures with these numbers.

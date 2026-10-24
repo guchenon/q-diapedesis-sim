@@ -86,6 +86,14 @@ class LindbladEquivariantTTN:
         Integrates one step of the trace-preserving completely positive (CPTP) GKLS master equation:
             d(rho)/dt = -i [H_eff, rho] + gamma_eff * (L rho L^dagger - 0.5 * {L^dagger L, rho})
         where the jump operator L = |+><-| channels viscous drag into collective alignment.
+
+        D3 (ELN #003): this is now a pure RK4 integration of the generator above. Two terms that
+        were not part of the master equation have been removed: a blend of rho toward
+        `rho_attractor` on every step (which produced the attractor overlap directly rather than
+        letting the dissipator produce it), and a factor 0.05 multiplying the Hamiltonian
+        commutator (which scaled H_eff almost out of the dynamics). The reduced two-level
+        collective description remains a reduced-order surrogate, Status B: it is not derived
+        from the N-body dipolar Hamiltonian.
         """
         # Scale effective dissipation rate with Pries-Secomb blood viscosity
         gamma_eff = self.gamma_viscous * (float(local_viscosity_mPa_s) / 3.0)
@@ -95,30 +103,31 @@ class LindbladEquivariantTTN:
         ket_minus = np.array([[1.0], [-1.0]], dtype=complex) / np.sqrt(2.0)
         L_jump = ket_plus @ ket_minus.conj().T
         L_dag_L = L_jump.conj().T @ L_jump
+        H = np.asarray(h_floquet_2x2, dtype=complex)
 
-        # Unitary Liouvillian commutator + Lindblad dissipator
-        commutator = -1.0j * (h_floquet_2x2 @ self.rho - self.rho @ h_floquet_2x2)
-        dissipator = gamma_eff * (
-            L_jump @ self.rho @ L_jump.conj().T
-            - 0.5 * (L_dag_L @ self.rho + self.rho @ L_dag_L)
-        )
+        def liouvillian(rho: np.ndarray) -> np.ndarray:
+            """The GKLS generator, with no added relaxation and no rescaling of H (D3)."""
+            return -1.0j * (H @ rho - rho @ H) + gamma_eff * (
+                L_jump @ rho @ L_jump.conj().T - 0.5 * (L_dag_L @ rho + rho @ L_dag_L)
+            )
 
-        # Stable exponential-like Euler relaxation toward the CPTP fixed point
-        alpha_step = float(np.clip(gamma_eff * dt_s * 12.0, 0.01, 0.35))
-        rho_next = self.rho + commutator * float(dt_s) * 0.05 + dissipator * float(dt_s)
-        rho_next = (1.0 - alpha_step) * rho_next + alpha_step * self.rho_attractor
+        # Classical RK4 on the Liouvillian. The generator is linear and trace-annihilating,
+        # so RK4 preserves trace and Hermiticity to machine precision without any projection.
+        dt = float(dt_s)
+        k1 = liouvillian(self.rho)
+        k2 = liouvillian(self.rho + 0.5 * dt * k1)
+        k3 = liouvillian(self.rho + 0.5 * dt * k2)
+        k4 = liouvillian(self.rho + dt * k3)
+        self.rho = self.rho + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+        self.current_time_s += dt
 
-        # Enforce Hermiticity and unit trace
-        rho_next = 0.5 * (rho_next + rho_next.conj().T)
-        trace_val = float(np.real(np.trace(rho_next)))
-        self.rho = rho_next / max(trace_val, 1e-12)
-        self.current_time_s += float(dt_s)
-
-        # Compute purity Tr(rho^2), von Neumann entropy, and overlap with target attractor
-        purity = float(np.clip(np.real(np.trace(self.rho @ self.rho)), 0.5, 1.0))
+        # Purity Tr(rho^2), von Neumann entropy, and overlap with the attractor, reported as
+        # computed. These were previously clipped to their physical ranges, which would have
+        # hidden any integration error; the GKLS tests assert the bounds instead (D3).
+        purity = float(np.real(np.trace(self.rho @ self.rho)))
         eigvals = np.clip(np.real(np.linalg.eigvalsh(self.rho)), 1e-12, 1.0)
         vn_entropy = float(-np.sum(eigvals * np.log2(eigvals)))
-        overlap = float(np.clip(np.real(np.trace(self.rho @ self.rho_attractor)), 0.0, 1.0))
+        overlap = float(np.real(np.trace(self.rho @ self.rho_attractor)))
 
         grad_var = self.compute_ttn_gradient_variance(
             n_agents=self.n_super,

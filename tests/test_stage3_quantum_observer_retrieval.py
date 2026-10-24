@@ -39,9 +39,18 @@ def test_step16_bimodal_floquet_and_baselines():
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "C2 (ELN #002): gradient variance 9.5e-4 < 1e-3 threshold and 6.6 < 10 orders; "
-        "kept as a reported failure until D2-b replaces the closed-form TTN variance "
-        "with a real computation. Thresholds unchanged."
+        "Two independent failures, thresholds unchanged. "
+        "(1) C2 (ELN #002): gradient variance 9.5e-4 < 1e-3 and 6.6 < 10 orders; kept as a "
+        "reported failure until D2-b replaces the closed-form TTN variance with a real "
+        "computation. "
+        "(2) D3 Stage 3 (ELN #003): with the blend toward `rho_attractor` removed and the GKLS "
+        "equation integrated as written (RK4), `dissipative_attractor_overlap` is 0.550 at the "
+        "25-step mark and only 0.622 at steady state, against the preregistered > 0.80. The "
+        "preregistered dissipation is 60x weaker than the Floquet Hamiltonian "
+        "(gamma_eff = 0.19 /s vs ||H_eff|| = 11.4 rad/s), so coherent precession dominates and "
+        "the dissipative fixed point is never approached. Reaching 0.80 at steady state needs "
+        "viscous_dissipation_gamma ~ 30 instead of 0.15, a 200x increase. The earlier pass came "
+        "entirely from the blend, not from the dissipator."
     ),
 )
 def test_step17_lindblad_dissipation_and_equivariant_ttn_barren_plateau():
