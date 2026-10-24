@@ -56,3 +56,4 @@ D1-c (keep 5.50 Pa; fix H1; add distal bed resistance calibrated to physiologica
 | Step | ID | Change | Before | After | Commit message prefix |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 2 | C2 (D2-a) | `step17`, `step18` marked `xfail(strict=True)` with reasons; thresholds unchanged | CI: 10 passed, 2 failed | CI: 10 passed, 2 xfailed | `D2a:` |
+| 3 | H2 | CPP barrier made hard (slack removed), rate bound set to the staged/pH-gated cap, post-solve clip; new test `tests/test_cbf_cpp_rate_cap.py` (18 cases) written first | 16/18 cases over cap. Rate/cap at rf=0.5, pH 6.65: **0.1765 / 0.0208 (8.5× over; pH gate ineffective)**; at pH 7.15: 0.1455 / 0.1389 | 18/18 within cap. rf=0.5, pH 6.65: 0.0208 / 0.0208; pH 7.15: 0.1389 / 0.1389; rf=0, pH 6.65: 0.1111 (was 0.1160) | `Fix H2:` |

@@ -158,11 +158,13 @@ class NeurocriticalCBFSafetyFilter:
             cpp_surge = self.Surge_mmHg_per_recanal_rate * z[1]
             h_c = self.max_cpp_surge_mmHg_s - cpp_surge
             still_acidic_penalty = max(0.0, self.min_safe_pH - distal_pH) * 2.0
-            return self.kappa_cpp * (max_recanal_rate - z[1]) - still_acidic_penalty * z[1] + z[2]
+            # Hard constraint (no slack): the shared relaxation slack let the rate exceed the
+            # staged / pH-gated cap (H2, ELN #002). Feasible for every state via z[1] = 0.
+            return self.kappa_cpp * (max_recanal_rate - z[1]) - still_acidic_penalty * z[1]
 
         bounds = [
             (0.05, 1.0),
-            (0.0, max(max_recanal_rate, float(nominal_recanal_rate_inv_s))),
+            (0.0, max_recanal_rate),
             (0.0, 2.0),
         ]
         constraints = [
@@ -192,6 +194,8 @@ class NeurocriticalCBFSafetyFilter:
                 scale_opt = min(scale_opt, 0.25)
             recanal_opt = float(min(nominal_recanal_rate_inv_s, max_recanal_rate))
             slack_opt = 0.0
+        # Hard safety projection: guarantee the CPP rate cap regardless of solver tolerance
+        recanal_opt = float(np.clip(recanal_opt, 0.0, max_recanal_rate))
         # Hard safety projection: guarantee the shear barrier regardless of solver tolerance
         avail_shear_final = max(0.0, effective_tau_max - float(hydrodynamic_wall_shear_Pa))
         scale_opt = float(np.clip(min(scale_opt, avail_shear_final / max(nom_robot_shear, 1e-6)), 0.05, 1.0))
