@@ -94,6 +94,18 @@ def test_step19_degaussing_retrograde_retrieval_mass_balance():
     assert rep_with_degauss.final_recovered_fraction > rep_no_degauss.final_recovered_fraction
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "D3 Stage 2 (ELN #003): `all_hypotheses_passed` now fails on the transient-washout "
+        "ceiling alone. Washout is an affine function of the Kuramoto order parameter, and with "
+        "the honest Stage 2 model (incoherent start, frequency dispersion, rotational noise) "
+        "r drops from ~0.95 to ~0.37, giving mean washout 2.50% vs the preregistered < 2.0% at "
+        "d = 30 um (2.49% at 15 um, 2.83% at 50 um). Every other gated component still passes "
+        "(peak shear 3.58 Pa, glycocalyx 0.987, fidelity 0.993, retrieval 0.9916, CPP surge 2.02). "
+        "Same root cause as the Stage 2 xfail; no threshold was changed."
+    ),
+)
 def test_step20_closed_loop_pipeline_and_diameter_sweep():
     # Audit Table Row 1a/1b: verify closed-loop pipeline at 15, 30, and 50 um diameters
     for d_um in (15.0, 30.0, 50.0):

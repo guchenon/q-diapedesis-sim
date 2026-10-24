@@ -89,6 +89,21 @@ class HydroMagneticSolitonSwarm:
         self.omega_alpha_rad_s = 2.0 * np.pi * float(drive["alpha_drill_frequency_Hz"])
         self.omega_beta_rad_s = 2.0 * np.pi * float(drive["beta_trap_frequency_Hz"])
 
+        # D3 Stage 2: frequency dispersion and rotational noise (implementation constants)
+        disp = self.vessel_cfg["implementation_constants"]["kuramoto_dispersion"]
+        self.natural_frequency_cv = float(disp["natural_frequency_cv"])
+        self.temperature_K = float(disp["temperature_K"])
+        self.particle_radius_um = float(soliton_layer_radius := self.vessel_cfg["biomimicry_layer"]["particle_radius_um"])
+        plasma_mu_Pa_s = 1.0e-3 * float(
+            self.vessel_cfg["hemodynamics_pries_secomb"]["plasma_viscosity_mPa_s"]
+        )
+        # Stokes-Einstein-Debye rotational diffusion of a sphere: D_r = kT / (8 pi eta a^3)
+        BOLTZMANN_J_PER_K = 1.380649e-23
+        radius_m = 1.0e-6 * float(soliton_layer_radius)
+        self.rotational_diffusion_rad2_s = (BOLTZMANN_J_PER_K * self.temperature_K) / (
+            8.0 * np.pi * plasma_mu_Pa_s * radius_m**3
+        )
+
         self.reset()
 
     def reset(self) -> BiomimeticSwarmState:
@@ -109,8 +124,20 @@ class HydroMagneticSolitonSwarm:
         # Initialize radial positions near vessel wall (post-margination band)
         self.r_um = self.rng.uniform(0.75 * self.lumen_radius_um, 0.94 * self.lumen_radius_um, size=self.n_super)
 
-        # Initialize oscillator phases with moderate initial spread
-        self.phases_rad = self.rng.uniform(-0.6, 0.6, size=self.n_super)
+        # D3 Stage 2: start incoherent over the whole circle. A narrow initial window made
+        # the order parameter start near 0.95, so "synchronization" was the initial condition.
+        self.phases_rad = self.rng.uniform(-np.pi, np.pi, size=self.n_super)
+
+        # D3 Stage 2: per-rotor natural frequencies, dispersed about each sub-swarm's drive
+        # frequency. Without this the oscillators are identical and cannot desynchronize.
+        self.natural_omegas_rad_s = np.empty(self.n_super, dtype=float)
+        for group_id, omega_0 in ((0, self.omega_alpha_rad_s), (1, self.omega_beta_rad_s)):
+            mask = self.labels == group_id
+            self.natural_omegas_rad_s[mask] = self.rng.normal(
+                loc=omega_0,
+                scale=self.natural_frequency_cv * abs(omega_0),
+                size=int(np.count_nonzero(mask)),
+            )
         return self.get_state(collateral_skimming_fraction=0.05, wall_locked=True)
 
     @staticmethod
@@ -136,7 +163,11 @@ class HydroMagneticSolitonSwarm:
         """
         K_eff = self.coupling_K if enable_soliton_coupling else 0.0
 
-        # Sakaguchi-Kuramoto phase update within each frequency-decoupled sub-swarm
+        # Sakaguchi-Kuramoto phase update within each frequency-decoupled sub-swarm.
+        # Written in the rotating frame of each sub-swarm's drive frequency, so the detuning
+        # of rotor i is its natural frequency minus that drive frequency (D3 Stage 2).
+        dt = float(dt_s)
+        noise_scale = np.sqrt(2.0 * self.rotational_diffusion_rad2_s * dt)
         for group_id, omega_0 in ((0, self.omega_alpha_rad_s), (1, self.omega_beta_rad_s)):
             mask = self.labels == group_id
             theta_g = self.phases_rad[mask]
@@ -148,9 +179,11 @@ class HydroMagneticSolitonSwarm:
             else:
                 coupling_term = np.zeros_like(theta_g)
 
-            # Rotate in the frame of the driving frequency so phase dispersion decays
-            dtheta_dt = coupling_term
-            self.phases_rad[mask] = (theta_g + dtheta_dt * float(dt_s)) % (2.0 * np.pi)
+            detuning = self.natural_omegas_rad_s[mask] - omega_0
+            rotational_noise = noise_scale * self.rng.standard_normal(n_g)
+            self.phases_rad[mask] = (
+                theta_g + (detuning + coupling_term) * dt + rotational_noise
+            ) % (2.0 * np.pi)
 
         # Step 14: Axial dynamics for alpha (drilling toward thrombus center) and beta (stabilizing mesh)
         alpha_mask = self.labels == 0

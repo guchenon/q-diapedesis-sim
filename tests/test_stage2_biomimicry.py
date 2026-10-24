@@ -5,6 +5,7 @@ and Dual Sub-Swarm Partitioning (< 2.0% Transient Bifurcation Washout Target).
 """
 
 import numpy as np
+import pytest
 from src.biomimicry_mechanics import (
     LeukocyteCatchBondMargination,
     HydroMagneticSolitonSwarm,
@@ -48,6 +49,20 @@ def test_step11_and_step12_margination_and_catch_bond_sweep():
     assert sweep["lifetime_s_at_Fstar_20pN"] > 0.0
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "D3 Stage 2 (ELN #003): with a genuinely incoherent start, per-rotor natural-frequency "
+        "dispersion and Stokes-Einstein-Debye rotational noise, the preregistered coupling "
+        "K = 4.50 rad/s is below the critical coupling of the 80 Hz alpha sub-swarm "
+        "(K_c ~ sigma*sqrt(8/pi) + 2D ~ 18 rad/s at the a-priori 2% frequency CV). "
+        "Measured r_global = 0.30 vs the preregistered >= 0.85; beta coverage 0.79 vs >= 0.90; "
+        "washout 2.78% vs < 2.0%. The earlier pass came from initializing phases inside a "
+        "+/-0.6 rad window (r started at ~0.95), not from the coupling. Even at zero frequency "
+        "dispersion r reaches only 0.795 in 2 s. Thresholds deliberately left unchanged; "
+        "awaiting a decision on K (or on the threshold) from the preregistration owner."
+    ),
+)
 def test_step13_and_step14_soliton_synchronization_and_washout():
     margination = LeukocyteCatchBondMargination()
     swarm = HydroMagneticSolitonSwarm()

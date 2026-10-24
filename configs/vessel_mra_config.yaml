@@ -57,3 +57,14 @@ implementation_constants:
   distal_bed_calibration:
     target_open_vessel_peak_wss_Pa: 3.9           # Rovainen et al., JCBFM 1993;13:359 (39 +/- 14 dyn/cm^2)
     calibration_diameter_um: 30.0                 # calibrated once; held fixed for other diameters
+  kuramoto_dispersion:
+    # Natural-frequency dispersion of the driven magnetic rotors, as a fraction of each
+    # sub-swarm's drive frequency. Set a priori under D3 (ELN #003): below the step-out
+    # limit a driven rotor is frequency-locked to the field, so the residual dispersion
+    # reflects hydrodynamic heterogeneity only. 2% is conservative - far below the 5-15%
+    # diameter CV of real magnetic microparticle populations. NOT fitted to any outcome.
+    natural_frequency_cv: 0.02
+    # Rotational diffusion is NOT set here: it is derived in code from Stokes-Einstein-Debye,
+    # D_r = kT / (8 pi eta a^3), using biomimicry_layer.particle_radius_um and
+    # hemodynamics_pries_secomb.plasma_viscosity_mPa_s at the temperature below.
+    temperature_K: 310.0

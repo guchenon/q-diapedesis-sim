@@ -98,3 +98,40 @@ D1-c (keep 5.50 Pa; fix H1; add distal bed resistance calibrated to physiologica
 * The *absolute* targets are not robust. At the a-priori parameters the CBF-on run meets the stated goals (glycocalyx 0.987 ≥ 0.92, NETosis 0.002 < 0.03), but at `n = 2` the same CBF-on run gives glycocalyx 0.587–0.699 and NETosis 0.052–0.076, failing both. Any claim phrased as an absolute retention or NETosis number is therefore a claim about `n`, not about the controller. The Hill exponent is unconstrained by the cited data; nothing in Baratchi et al. 2024 fixes it.
 * Removing the step makes the no-CBF baseline fail harder than before (glycocalyx 0.846 → 0.654, NETosis 0.013 → 0.056) because sub-ceiling shear now causes damage. This is a consequence of a more honest damage law, not evidence of stronger protection.
 * Glycocalyx retention and NETosis are **not** preregistered gated endpoints at end-of-episode, so none of the above changes a hypothesis outcome. They are descriptive.
+
+| 6b | C3 (D3-b), Stage 2 | `soliton_kuramoto_swarm.py`: phases now initialized over the full circle `uniform(−π, π)` instead of `uniform(−0.6, 0.6)`; per-rotor natural frequencies `ω_i ~ N(ω_0g, σ_ω)` with the detuning `ω_i − ω_0g` entering the update; rotational noise `√(2·D_r·dt)·ξ` added. `σ_ω/ω_0 = 0.02` set a priori in `implementation_constants.kuramoto_dispersion`; `D_r` **derived** in code from Stokes–Einstein–Debye `D_r = kT/(8πηa³)` using the existing config radius 0.75 µm, plasma viscosity 1.20 mPa·s and 310 K → **0.336 rad²/s**. Test `tests/test_kuramoto_frequency_dispersion.py` written first (4 failed before) | Initial `r = 0.95` by construction; no detuning and no noise, so the model could not desynchronize. Stage 2 after 2 s: `r_global` 0.98, β coverage 0.976, washout 1.03%. Closed loop 10 s (d = 30): washout 0.72%, PASS | Initial `r = 0.022` (incoherent, ≈1/√200). Stage 2 after 2 s: `r_global` **0.304**, `r_alpha` **0.131**, β coverage **0.793**, washout **2.78%**. Closed loop 10 s (d = 30): washout **2.50%**, FAIL on that component only. Suite 46 passed, 4 xfailed | `D3 Stage 2:` |
+
+**A-priori parameter choices for step 6b (fixed before any outcome was computed):**
+* `σ_ω/ω_0 = 2 %` — below the step-out limit a magnetically driven rotor is frequency-locked to the field, so residual natural-frequency dispersion reflects hydrodynamic heterogeneity only. 2 % is deliberately conservative: real magnetic microparticle populations show 5–15 % diameter CV, and magnetic moment scales with volume. Not fitted.
+* `D_r` not chosen at all — derived from Stokes–Einstein–Debye with parameters already in the preregistered config. Result 0.336 rad²/s.
+
+**Critical-coupling check (analytic, Sakaguchi–Kuramoto with Gaussian frequencies and noise, `K_c ≈ σ_ω·√(8/π) + 2·D_r`):**
+
+| Sub-swarm | Drive | σ_ω at 2 % CV | K_c | Config `kuramoto_coupling_K` | Synchronizes? |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| α (drill) | 80 Hz = 502.7 rad/s | 10.92 rad/s | **18.1 rad/s** | 4.50 rad/s | **no** (K is 4× below K_c) |
+| β (mesh) | 5 Hz = 31.4 rad/s | 0.65 rad/s | 1.71 rad/s | 4.50 rad/s | yes |
+
+**σ_ω sweep (mean of seeds 1–3, 2 s, `K` held at the preregistered 4.50 rad/s):**
+
+| frequency CV | σ_ω (α) | r_global | r_alpha | β coverage | washout % | meets r ≥ 0.85 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 (identical rotors) | 0.00 | 0.795 | 0.826 | 0.872 | 1.41 | **no** |
+| 0.1 % | 0.50 | 0.814 | 0.850 | 0.877 | 1.35 | **no** |
+| 0.25 % | 1.26 | 0.744 | 0.729 | 0.879 | 1.55 | no |
+| 0.5 % | 2.51 | 0.431 | 0.211 | 0.877 | 2.42 | no |
+| 1 % | 5.03 | 0.392 | 0.134 | 0.886 | 2.53 | no |
+| **2 % (a priori)** | 10.05 | **0.369** | 0.099 | 0.883 | 2.60 | no |
+| 5 % | 25.13 | 0.271 | 0.043 | 0.814 | 2.87 | no |
+
+**Findings from step 6b — THREE PREREGISTERED THRESHOLDS NOW FAIL. Reported, not tuned:**
+1. **`kuramoto_order_r ≥ 0.85` fails** (0.304 at the a-priori parameters). The previous pass was an artifact of the initial condition: phases started inside a ±0.6 rad window, so `r` began at ≈0.95 and the assertion `r_final > r_initial` was comparing two already-synchronized states. With no detuning and no noise a Kuramoto model is incapable of desynchronizing, so the threshold was true by construction and tested nothing about the coupling.
+2. **The failure is not caused by my choice of σ_ω.** At *zero* frequency dispersion — the most favorable honest case, rotational noise only — `r_global` reaches just 0.795 in 2 s, still short of 0.85. No value of σ_ω in the sweep reaches the threshold. The binding constraint is that the α sub-swarm's critical coupling scales with its 80 Hz drive while `kuramoto_coupling_K = 4.50` does not.
+3. **`beta_mesh_coverage_ratio ≥ 0.90` fails** (0.79–0.89 across the whole sweep). Coverage is defined as `0.55 + 0.43·r_beta`, so it can only reach 0.90 if `r_beta ≥ 0.814`; it is not an independent measurement.
+4. **`transient_washout_percent < 2.0` fails in the closed loop** (2.50 % at d = 30 µm, 2.49 % at 15 µm, 2.83 % at 50 µm). Washout is also an affine function of `r`, so this is the same finding a third time rather than three independent failures. Note the direction: the **no-CBF** run has *lower* washout (0.74 %) purely because it recanalizes faster, which is not a safety benefit.
+5. `step20`'s `all_hypotheses_passed` fails on washout **alone**; peak shear 3.58 Pa, glycocalyx 0.987, fidelity 0.993, retrieval 0.9916 and CPP surge 2.02 all still pass.
+
+**Action taken:** no threshold and no preregistered config value was changed. `test_step13_and_step14_soliton_synchronization_and_washout` and `test_step20_closed_loop_pipeline_and_diameter_sweep` are marked `xfail(strict=True)` with the reasons above, following the precedent approved for D2-a. **This needs a decision from the preregistration owner**, and the options are not equivalent:
+* Re-derive `kuramoto_coupling_K` from the magnetic dipole–dipole interaction at the modeled inter-particle spacing, so that it is a physical quantity rather than a free parameter. If the derived value exceeds ~18 rad/s the thresholds may hold; if it does not, the Stage 2 hypothesis is falsified as stated. **This is the only option that resolves the question rather than restating it.**
+* Keep `K = 4.50` and record Stage 2 as a falsified hypothesis.
+* Changing 0.85, 0.90 or 2.0 % to match the new numbers would be fitting the threshold to the result and is **not** recommended; if chosen it must be filed on OSF as a deviation.
