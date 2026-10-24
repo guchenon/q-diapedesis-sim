@@ -25,4 +25,4 @@ jobs:
 
       - name: Run Preregistration Sanity Tests
         run: |
-          pytest tests/test_config_sanity.py -v
+          pytest tests/ -v
