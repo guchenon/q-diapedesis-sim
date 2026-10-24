@@ -46,3 +46,13 @@ D1-c (keep 5.50 Pa; fix H1; add distal bed resistance calibrated to physiologica
 1. No preregistered threshold is lowered or changed.
 2. Model parameters introduced by D1/D3 are fixed from cited sources or stated a-priori rationale **before** outcomes are inspected, and the resulting outcomes are reported as they come out, including negative results.
 3. Any change to how a preregistered comparison is evaluated is logged below as a **deviation** and must also be filed on OSF.
+
+---
+
+## Log Entry #003 — Implementation of Decisions D1–D6
+* **Date:** 2026-10-24
+* **Branch:** `claude/argon-d1-d6` (one issue per commit)
+
+| Step | ID | Change | Before | After | Commit message prefix |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 2 | C2 (D2-a) | `step17`, `step18` marked `xfail(strict=True)` with reasons; thresholds unchanged | CI: 10 passed, 2 failed | CI: 10 passed, 2 xfailed | `D2a:` |
