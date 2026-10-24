@@ -28,3 +28,16 @@ mri_sub_voxel_observer:
   mri_blind_window_ms: 100.0
   pino_update_interval_ms: 2.0
   tomography_measurement_shots: 512
+
+# ----------------------------------------------------------------------------
+# Model implementation constants (not preregistered hypothesis thresholds).
+# Added 2026-10-24 under decisions D2-b/D3/D5; rationale logged in ELN #003.
+# ----------------------------------------------------------------------------
+implementation_constants:
+  barren_plateau:
+    # Floor previously hard-coded in lindblad_ttn.py as 1.0e-3. Moved here unchanged under D5.
+    # NOTE (ELN #003): a fixed floor is not what the cited barren-plateau results claim.
+    # Plateau freedom means Var[dC/dtheta] decays only polynomially in N; see
+    # equivariant_scaling_exponent() for the quantity the theory actually bounds.
+    gradient_variance_floor: 1.0e-3
+    measurement_samples: 256

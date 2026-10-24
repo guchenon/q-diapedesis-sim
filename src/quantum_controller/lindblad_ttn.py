@@ -14,10 +14,19 @@ Part of the Q-DIAPEDESIS Framework (OSF: https://osf.io/htswk | DOI: 10.5281/zen
 """
 
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Dict
 import numpy as np
 import yaml
+
+from .ttn_gradient_variance import (
+    GLOBAL_COST_FIT_SIZES,
+    equivariant_local_cost_gradient_variance,
+    equivariant_scaling_exponent,
+    global_cost_gradient_variance,
+    gradient_variance_scaling,
+)
 
 
 @dataclass
@@ -65,7 +74,23 @@ class LindbladEquivariantTTN:
         self.equivariant = bool(ttn_cfg["permutation_equivariant_symmetry"])
 
         self.n_super = int(self.cfg["swarm_scaling"]["n_super_particles"])
+
+        # D5: the barren-plateau floor was hard-coded as 1.0e-3; moved to config unchanged.
+        bp_cfg = self.cfg["implementation_constants"]["barren_plateau"]
+        self.gradient_variance_floor = float(bp_cfg["gradient_variance_floor"])
+        self.gradient_variance_samples = int(bp_cfg["measurement_samples"])
+
         self.reset()
+
+    @cached_property
+    def measured_gradient_variance(self) -> float:
+        """Measured Var[dC/dtheta] for this controller's ansatz. Computed once, then reused."""
+        return self.compute_ttn_gradient_variance(
+            n_agents=self.n_super,
+            equivariant=self.equivariant,
+            local_cost=True,
+            n_samples=self.gradient_variance_samples,
+        )
 
     def reset(self) -> None:
         """Initializes the reduced collective 2-level density matrix rho in a mixed state."""
@@ -129,11 +154,10 @@ class LindbladEquivariantTTN:
         vn_entropy = float(-np.sum(eigvals * np.log2(eigvals)))
         overlap = float(np.real(np.trace(self.rho @ self.rho_attractor)))
 
-        grad_var = self.compute_ttn_gradient_variance(
-            n_agents=self.n_super,
-            equivariant=self.equivariant,
-            local_cost=True,
-        )
+        # The gradient variance is a property of the ansatz, not of rho, so it does not change
+        # from step to step. It is now really computed, which costs far more than a closed-form
+        # expression, so it is evaluated once per controller and reused (D2-b).
+        grad_var = self.measured_gradient_variance
 
         # Optimal field modulation scale derived from TTN energy minimization
         field_scale = float(np.clip(0.85 + 0.15 * overlap, 0.70, 1.05))
@@ -145,7 +169,7 @@ class LindbladEquivariantTTN:
             dissipative_attractor_overlap=overlap,
             ttn_bond_dimension_chi=self.chi_max,
             gradient_variance=grad_var,
-            barren_plateau_free_verified=bool(grad_var >= 1.0e-3),
+            barren_plateau_free_verified=bool(grad_var >= self.gradient_variance_floor),
             optimal_field_correction_scale=field_scale,
         )
 
@@ -155,46 +179,48 @@ class LindbladEquivariantTTN:
         equivariant: bool = True,
         local_cost: bool = True,
         seed: int = 42,
+        n_samples: int = 256,
     ) -> float:
         """
-        Evaluates the empirical parameter gradient variance Var[dL/dtheta] across system size N:
-          - For S_n-equivariant isometric TTN with a local cost (Barthel & Miao 2025; Schatzki 2024):
-            tree depth is tau = ceil(log2(N)), and Var[dL/dtheta] scales polynomially as Omega(1 / N^alpha).
-          - For an unstructured deep hardware-efficient ansatz with a global cost (McClean et al. 2018):
-            Var[dL/dtheta] decays exponentially as O(2^{-N}), causing a barren plateau.
+        Measures the parameter gradient variance Var[dC/dtheta] by building a parameterized
+        circuit, evaluating its cost, and differentiating it (D2-b / D3, ELN #003).
+
+        Previously this returned the closed-form `Var[sin(a) cos(b) / sqrt(N)]` for the
+        equivariant branch and the literal constant `0.25 * 2**-min(N, 30)` for the global
+        baseline. Neither was the gradient of a cost function and no circuit was built, so the
+        barren-plateau claim rested on two hand-written numbers. The work is now done in
+        `ttn_gradient_variance.py`:
+          - equivariant + local cost: exact analytic gradients of C = <J_z>/j on the symmetric
+            (Dicke) subspace, dimension N + 1, with ceil(log2 N) layers.
+          - unstructured + global cost: parameter-shift gradients of C = |<0...0|psi>|^2 on the
+            full 2^n state vector (McClean et al. 2018 barren plateau).
         """
-        N = max(4, int(n_agents))
-        rng = np.random.default_rng(seed + N)
-
         if equivariant and local_cost:
-            # Symmetrized Dicke / Isometric TTN subspace dim = N + 1; depth = log2(N)
-            tree_depth = np.ceil(np.log2(N))
-            # Sample Haar-like isometric angles in the O(log N) hierarchical tree layers
-            theta_samples = rng.uniform(0.0, 2.0 * np.pi, size=(64, int(tree_depth)))
-            # Local cost gradient decays at most polynomially with tree depth: (1 / (2 * log2(N)))
-            grad_samples = np.sin(theta_samples[:, 0]) * np.cos(theta_samples[:, -1]) / np.sqrt(float(N))
-            return float(np.var(grad_samples))
-
-        # Unstructured global-cost circuit: exponential barren plateau O(2^{-N})
-        effective_n = min(N, 30)
-        return float(0.25 * (2.0 ** (-effective_n)))
+            return float(
+                equivariant_local_cost_gradient_variance(
+                    n_agents=max(2, int(n_agents)), n_samples=int(n_samples), seed=int(seed)
+                )
+            )
+        # The global-cost baseline is simulated on the full Hilbert space, so it can only be
+        # evaluated at widths that fit in memory. Beyond that, use benchmark_barren_plateau_scaling,
+        # which fits the measured decay and labels the result as an extrapolation.
+        n_qubits = min(max(2, int(n_agents)), max(GLOBAL_COST_FIT_SIZES))
+        return float(global_cost_gradient_variance(n_qubits=n_qubits, n_samples=1500, seed=int(seed)))
 
     def benchmark_barren_plateau_scaling(self) -> Dict[str, float]:
         """
-        Compares gradient variance at N = 200 super-particles between:
+        Compares measured gradient variance at N = `n_super` between:
           1. Permutation-Equivariant Isometric TTN + Local Cost (Q-DIAPEDESIS)
           2. Generic Unstructured Ansatz + Global Cost (Barren Plateau baseline)
+
+        The N = 200 global-cost value is an extrapolation of the measured exponential decay -
+        2^200 amplitudes cannot be simulated - and the returned dictionary says so via
+        `unstructured_global_grad_var_is_extrapolated`. `polynomial_decay_exponent_p` is the
+        quantity the cited theory is about: plateau freedom means a finite p, not a variance
+        above any particular constant.
         """
-        var_equivariant_ttn = self.compute_ttn_gradient_variance(
-            n_agents=self.n_super, equivariant=True, local_cost=True
+        report = dict(gradient_variance_scaling(n_agents=self.n_super))
+        report.update(
+            {f"equivariant_{k}": v for k, v in equivariant_scaling_exponent().items()}
         )
-        var_unstructured_global = self.compute_ttn_gradient_variance(
-            n_agents=self.n_super, equivariant=False, local_cost=False
-        )
-        return {
-            "equivariant_ttn_local_grad_var": var_equivariant_ttn,
-            "unstructured_global_grad_var": var_unstructured_global,
-            "variance_improvement_orders_of_magnitude": float(
-                np.log10(max(var_equivariant_ttn, 1e-30) / max(var_unstructured_global, 1e-30))
-            ),
-        }
+        return report
