@@ -70,16 +70,18 @@ class PriesSecombPulsatileFlow:
         """
         D = np.clip(diameter_um, 4.0, 300.0)
 
-        # Viscosity at Hct = 0.45 in vitro/vivo reference curve
-        mu_045 = 220.0 * np.exp(-1.3 * D) + 3.2 - 2.44 * np.exp(-0.06 * (D ** 0.645))
+        # In-vivo viscosity at Hct = 0.45 (Pries et al., Circ. Res. 1994). The in-vitro
+        # term 220*exp(-1.3D) was used here before H1 (ELN #002); the in-vivo law uses 6*exp(-0.085D).
+        mu_045 = 6.0 * np.exp(-0.085 * D) + 3.2 - 2.44 * np.exp(-0.06 * (D ** 0.645))
 
         # Curvature parameter C(D) describing hematocrit dependence
         term_exp = np.exp(-0.075 * D)
         denom = 1.0 + 10.0 ** (-11.0) * (D ** 12.0)
         C_D = (0.8 + term_exp) * (-1.0 + 1.0 / denom) + (1.0 / denom)
 
-        # In-vivo endothelial glycocalyx macromolecular retardation factor
-        d_eff_ratio = (D / (D + 1.1)) ** 2
+        # In-vivo endothelial surface layer factor z = (D / (D - 1.1))^2 (Pries et al. 1994);
+        # the denominator is floored at 1.5 um so the factor stays finite for very narrow channels.
+        d_eff_ratio = (D / np.maximum(D - 1.1, 1.5)) ** 2
         relative_visc = (
             1.0
             + (mu_045 - 1.0)
